@@ -230,7 +230,6 @@ print(f”Error updating session: {e}”)
 return False
 
 def get_all_sessions():
-“”“Retrieve all sessions from Airtable”””
 try:
 url = f”https://api.airtable.com/v0/{st.secrets[‘AIRTABLE_BASE_ID’]}/Test_Sessions”
 headers = {
@@ -249,7 +248,6 @@ st.error(f”Error fetching sessions: {e}”)
 return []
 
 def get_conversation_messages(session_record_id: str):
-“”“Retrieve all messages for a specific session”””
 try:
 url = f”https://api.airtable.com/v0/{st.secrets[‘AIRTABLE_BASE_ID’]}/Conversation_Log”
 headers = {
@@ -272,12 +270,10 @@ except Exception as e:
 ```
 
 def display_admin_interface():
-“”“Display the admin conversation viewer”””
 st.title(“🔧 Admin - Conversation Viewer”)
 st.markdown(”—”)
 
 ```
-# Get all sessions
 sessions = get_all_sessions()
 
 if not sessions:
@@ -286,7 +282,6 @@ if not sessions:
 
 st.markdown(f"**Total Sessions:** {len(sessions)}")
 
-# Session selector
 session_options = []
 for session in sessions:
     fields = session.get('fields', {})
@@ -295,7 +290,6 @@ for session in sessions:
     total_messages = fields.get('total_messages', 0)
     created_time = fields.get('created_time', 'Unknown')
     
-    # Format created time
     if created_time != 'Unknown':
         try:
             from datetime import datetime
@@ -320,7 +314,6 @@ if selected_option:
     session_record_id = selected_session['id']
     session_fields = selected_session.get('fields', {})
     
-    # Display session info
     st.markdown("### Session Details")
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -332,7 +325,6 @@ if selected_option:
     
     st.markdown("---")
     
-    # Get and display conversation
     messages = get_conversation_messages(session_record_id)
     
     if messages:
@@ -345,7 +337,6 @@ if selected_option:
             message_order = fields.get('message_order', 0)
             resources_used = fields.get('coaching_resources_used', 0)
             
-            # Role indicator
             if role == 'user':
                 st.markdown(f"**🧑‍💼 Player (Message {message_order}):**")
                 with st.container():
@@ -357,11 +348,10 @@ if selected_option:
                 with st.container():
                     st.markdown(content)
             
-            st.markdown("")  # Add spacing
+            st.markdown("")
     else:
         st.warning("No conversation messages found for this session.")
 
-# Back to coaching button
 st.markdown("---")
 if st.button("🎾 Back to Coaching Mode", type="primary"):
     st.session_state.admin_mode = False
@@ -377,11 +367,9 @@ initial_sidebar_state=“collapsed”
 )
 
 ```
-# Initialize admin mode in session state
 if 'admin_mode' not in st.session_state:
     st.session_state.admin_mode = False
 
-# Check if admin mode should be displayed
 if st.session_state.admin_mode:
     display_admin_interface()
     return
@@ -429,7 +417,7 @@ if "messages" not in st.session_state:
     if "tester_name" not in st.session_state:
         st.session_state.tester_name = None
     
-    welcome_msg = """👋 Hi! I'm your tennis coach. What would you like to work on today?
+    welcome_msg = """👋 Hi! How is your game coming along? What shall we work on today?
 ```
 
 I can help with technique, strategy, mental game, or any specific issues you’re having on court.”””
@@ -461,13 +449,11 @@ for message in st.session_state.messages:
         st.markdown(message["content"])
 
 if prompt := st.chat_input("Ask your tennis coach..."):
-    # Check for admin mode activation
     if prompt.strip().lower() == "hilly spike":
         st.session_state.admin_mode = True
         st.rerun()
         return
     
-    # Check for admin mode deactivation (if somehow admin mode is active)
     if prompt.strip().lower() == "exit hilly spike":
         st.session_state.admin_mode = False
         st.rerun()
