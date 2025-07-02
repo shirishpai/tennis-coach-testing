@@ -553,3 +553,7 @@ if prompt := st.chat_input("Ask your tennis coach..."):
                         "assistant",
                         error_msg
                     )
+```
+
+if **name** == “**main**”:
+main()
