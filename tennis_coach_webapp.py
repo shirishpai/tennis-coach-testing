@@ -277,7 +277,7 @@ def main():
         if "tester_name" not in st.session_state:
             st.session_state.tester_name = None
         
-        welcome_msg = """👋 Hi! How is your game comin along? What shall we work on today?
+        welcome_msg = """👋 Hi! How is your game coming along? What shall we work on today?
 
 I can help with technique, strategy, mental game, or any specific issues you're having on court."""
         
