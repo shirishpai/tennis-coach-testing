@@ -39,6 +39,7 @@ def get_embedding(text: str) -> List[float]:
     except Exception as e:
         st.error(f"Embedding error: {e}")
         return []
+
 def extract_array_value(metadata_field):
     if not metadata_field:
         return "Not specified"
@@ -131,6 +132,7 @@ def query_claude(client, prompt: str) -> str:
         return response.content[0].text
     except Exception as e:
         return f"Error generating coaching response: {e}"
+
 def create_session_record(session_id: str, tester_name: str) -> str:
     try:
         url = f"https://api.airtable.com/v0/{st.secrets['AIRTABLE_BASE_ID']}/Test_Sessions"
@@ -223,12 +225,13 @@ def update_session_stats(session_id: str, total_messages: int) -> bool:
     except Exception as e:
         print(f"Error updating session: {e}")
         return False
+
 def main():
     st.set_page_config(
-    page_title="Tennis Coach AI",
-    page_icon="🎾",
-    layout="centered",
-    initial_sidebar_state="collapsed"
+        page_title="Tennis Coach AI",
+        page_icon="🎾",
+        layout="centered",
+        initial_sidebar_state="collapsed"
     )
     
     st.title("🎾 Tennis Coach AI")
@@ -236,45 +239,45 @@ def main():
     st.markdown("---")
     
     with st.spinner("Connecting to tennis coaching database..."):
-    index, claude_client = setup_connections()
+        index, claude_client = setup_connections()
     
     if not index or not claude_client:
-    st.error("Failed to connect to coaching systems. Please check API keys.")
-    st.stop()
+        st.error("Failed to connect to coaching systems. Please check API keys.")
+        st.stop()
     
     with st.sidebar:
-    st.header("🔧 Admin Controls")
-    top_k = st.slider("Coaching resources", 1, 8, 3)
+        st.header("🔧 Admin Controls")
+        top_k = st.slider("Coaching resources", 1, 8, 3)
         
-    if st.button("🔄 New Session"):
-    st.session_state.messages = []
-    st.session_state.conversation_log = []
-    st.rerun()
+        if st.button("🔄 New Session"):
+            st.session_state.messages = []
+            st.session_state.conversation_log = []
+            st.rerun()
         
-    if 'conversation_log' in st.session_state and st.session_state.conversation_log:
-    st.markdown(f"**Session messages:** {len(st.session_state.conversation_log)}")
+        if 'conversation_log' in st.session_state and st.session_state.conversation_log:
+            st.markdown(f"**Session messages:** {len(st.session_state.conversation_log)}")
             
-    with st.expander("📋 Full Session Log"):
-    for i, entry in enumerate(st.session_state.conversation_log):
-    st.markdown(f"**Message {i+1}:** {entry['role']}")
-    st.markdown(f"*Content:* {entry['content'][:100]}...")
-    if 'chunks' in entry:
-    st.markdown(f"*Sources used:* {len(entry['chunks'])} resources")
-    for j, chunk in enumerate(entry['chunks']):
-    st.markdown(f"  - Resource {j+1}: {chunk['topics']} (score: {chunk['score']:.3f})")
+            with st.expander("📋 Full Session Log"):
+                for i, entry in enumerate(st.session_state.conversation_log):
+                    st.markdown(f"**Message {i+1}:** {entry['role']}")
+                    st.markdown(f"*Content:* {entry['content'][:100]}...")
+                    if 'chunks' in entry:
+                        st.markdown(f"*Sources used:* {len(entry['chunks'])} resources")
+                        for j, chunk in enumerate(entry['chunks']):
+                            st.markdown(f"  - Resource {j+1}: {chunk['topics']} (score: {chunk['score']:.3f})")
     
     if "messages" not in st.session_state:
-    session_id = str(uuid.uuid4())[:8]
-    st.session_state.session_id = session_id
-    st.session_state.airtable_record_id = None
-    st.session_state.messages = []
-    st.session_state.conversation_log = []
-    st.session_state.message_counter = 0
+        session_id = str(uuid.uuid4())[:8]
+        st.session_state.session_id = session_id
+        st.session_state.airtable_record_id = None
+        st.session_state.messages = []
+        st.session_state.conversation_log = []
+        st.session_state.message_counter = 0
         
-    if "tester_name" not in st.session_state:
-    st.session_state.tester_name = None
+        if "tester_name" not in st.session_state:
+            st.session_state.tester_name = None
         
-    welcome_msg = """👋 Hi! How's your game coming along? Woukd you like to work on something today?
+        welcome_msg = """👋 Hi! I'm your tennis coach. What would you like to work on today?
 
 I can help with technique, strategy, mental game, or any specific issues you're having on court."""
         
