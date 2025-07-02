@@ -1,0 +1,5 @@
+streamlit
+pinecone
+openai
+anthropic
+requests
