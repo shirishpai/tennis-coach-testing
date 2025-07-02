@@ -29,7 +29,7 @@ def setup_connections():
 def get_embedding(text: str) -> List[float]:
     try:
         api_key = st.secrets["OPENAI_API_KEY"]
-        st.write(f"Debug - Using OpenAI key ending in: ...{api_key[-4:]}")
+        
         client = openai.OpenAI(api_key=api_key)
         response = client.embeddings.create(
             input=text,
