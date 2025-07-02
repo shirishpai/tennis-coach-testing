@@ -39,7 +39,7 @@ def get_embedding(text: str) -> List[float]:
     except Exception as e:
         st.error(f"Embedding error: {e}")
         return []
-      def extract_array_value(metadata_field):
+def extract_array_value(metadata_field):
     if not metadata_field:
         return "Not specified"
     if isinstance(metadata_field, list):
