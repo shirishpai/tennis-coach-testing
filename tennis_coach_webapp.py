@@ -277,7 +277,7 @@ def main():
         if "tester_name" not in st.session_state:
             st.session_state.tester_name = None
         
-        welcome_msg = """👋 Hi! I'm your tennis coach. What would you like to work on today?
+        welcome_msg = """👋 Hi! How's your tennis coming along? Would you like to work on something today?
 
 I can help with technique, strategy, mental game, or any specific issues you're having on court."""
         
