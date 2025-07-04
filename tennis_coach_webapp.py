@@ -252,6 +252,7 @@ def main():
         if st.button("🔄 New Session"):
             st.session_state.messages = []
             st.session_state.conversation_log = []
+            st.session_state.player_setup_complete = False
             st.rerun()
         
         if 'conversation_log' in st.session_state and st.session_state.conversation_log:
@@ -266,46 +267,109 @@ def main():
                         for j, chunk in enumerate(entry['chunks']):
                             st.markdown(f"  - Resource {j+1}: {chunk['topics']} (score: {chunk['score']:.3f})")
     
-    if "messages" not in st.session_state:
-        session_id = str(uuid.uuid4())[:8]
-        st.session_state.session_id = session_id
-        st.session_state.airtable_record_id = None
-        st.session_state.messages = []
-        st.session_state.conversation_log = []
-        st.session_state.message_counter = 0
-        
-        if "tester_name" not in st.session_state:
-            st.session_state.tester_name = None
-        
-        welcome_msg = """👋 Hi! How is your game coming along? What shall we work on today?
+    # Updated player setup with email collection
+    if not st.session_state.get("player_setup_complete"):
+        with st.form("player_setup"):
+            st.markdown("### 🎾 Welcome to Tennis Coach AI")
+            st.markdown("**Quick setup to personalize your coaching experience:**")
+            
+            # Email collection (required)
+            player_email = st.text_input(
+                "Email address *", 
+                placeholder="your.email@example.com",
+                help="Required for session continuity and progress tracking"
+            )
+            
+            # Name collection  
+            player_name = st.text_input(
+                "Your name", 
+                placeholder="e.g., Sarah, Mike, Alex...",
+                help="How should your coach address you?"
+            )
+            
+            # Tennis level
+            tennis_level = st.selectbox(
+                "Tennis level",
+                ["Beginner", "Intermediate", "Advanced"],
+                help="Helps customize coaching advice"
+            )
+            
+            # Primary goals
+            primary_goals = st.multiselect(
+                "What do you want to work on?",
+                ["Technique", "Fitness", "Competition", "Fun", "Mental Game"],
+                default=["Technique"],
+                help="Select all that apply"
+            )
+            
+            # Learning style
+            learning_style = st.selectbox(
+                "Learning style",
+                ["Visual", "Kinesthetic", "Analytical", "Social"],
+                help="How do you learn best?"
+            )
+            
+            if st.form_submit_button("Start Coaching Session", type="primary"):
+                # Validation
+                if not player_email or "@" not in player_email:
+                    st.error("Please enter a valid email address.")
+                elif not player_name:
+                    st.error("Please enter your name.")
+                else:
+                    # Store player info in session state
+                    st.session_state.player_email = player_email
+                    st.session_state.player_name = player_name
+                    st.session_state.tennis_level = tennis_level
+                    st.session_state.primary_goals = primary_goals
+                    st.session_state.learning_style = learning_style
+                    st.session_state.player_setup_complete = True
+                    
+                    # Initialize session variables
+                    session_id = str(uuid.uuid4())[:8]
+                    st.session_state.session_id = session_id
+                    st.session_state.airtable_record_id = None
+                    st.session_state.messages = []
+                    st.session_state.conversation_log = []
+                    st.session_state.message_counter = 0
+                    
+                    # Create session record (using old system for now)
+                    airtable_record_id = create_session_record(session_id, player_name)
+                    if airtable_record_id:
+                        st.session_state.airtable_record_id = airtable_record_id
+                    
+                    # Welcome message
+                    welcome_msg = f"""👋 Hi {player_name}! I'm your Coach TA. 
+                    
+I see you're a {tennis_level.lower()} player focusing on {', '.join(primary_goals).lower()}. What shall we work on today?
 
 I can help with technique, strategy, mental game, or any specific issues you're having on court."""
-        
-        st.session_state.messages.append({"role": "assistant", "content": welcome_msg})
-        st.session_state.conversation_log.append({
-            "role": "assistant", 
-            "content": welcome_msg,
-            "timestamp": time.time()
-        })
-    
-    if not st.session_state.get("tester_name"):
-        with st.form("tester_info"):
-            st.markdown("**Quick setup:** What's your name?")
-            tester_name = st.text_input("Your name", placeholder="e.g., Alex, Sarah, Coach Mike...")
-            if st.form_submit_button("Start Coaching"):
-                st.session_state.tester_name = tester_name if tester_name else "Anonymous"
-                airtable_record_id = create_session_record(st.session_state.session_id, st.session_state.tester_name)
-                if airtable_record_id:
-                    st.session_state.airtable_record_id = airtable_record_id
+                    
+                    st.session_state.messages = [{"role": "assistant", "content": welcome_msg}]
+                    st.session_state.conversation_log = [{
+                        "role": "assistant", 
+                        "content": welcome_msg,
+                        "timestamp": time.time()
+                    }]
+                    
+                    st.success(f"Welcome {player_name}! Let's start your coaching session.")
                     st.rerun()
-                else:
-                    st.error("Failed to create session record. Please try again.")
         return
     
+    # Debug info (temporary - remove later)
+    if st.session_state.get("player_setup_complete"):
+        with st.expander("🔍 Debug: Player Info Stored"):
+            st.write("Email:", st.session_state.get("player_email"))
+            st.write("Name:", st.session_state.get("player_name"))
+            st.write("Level:", st.session_state.get("tennis_level"))
+            st.write("Goals:", st.session_state.get("primary_goals"))
+            st.write("Style:", st.session_state.get("learning_style"))
+    
+    # Display conversation messages
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
     
+    # Chat input
     if prompt := st.chat_input("Ask your tennis coach..."):
         st.session_state.message_counter += 1
         
@@ -328,7 +392,7 @@ I can help with technique, strategy, mental game, or any specific issues you're 
             st.markdown(prompt)
         
         with st.chat_message("assistant"):
-            with st.spinner("ummmm..."):
+            with st.spinner("Coach is thinking..."):
                 chunks = query_pinecone(index, prompt, top_k)
                 
                 if chunks:
