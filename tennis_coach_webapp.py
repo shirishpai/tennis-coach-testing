@@ -226,6 +226,84 @@ def update_session_stats(session_id: str, total_messages: int) -> bool:
         print(f"Error updating session: {e}")
         return False
 
+def find_player_by_email(email: str):
+    """Look up player in SSS Players table by email"""
+    try:
+        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Players"
+        headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
+        params = {"filterByFormula": f"{{email}} = '{email}'"}
+        
+        response = requests.get(url, headers=headers, params=params)
+        if response.status_code == 200:
+            records = response.json().get('records', [])
+            return records[0] if records else None
+        return None
+    except Exception as e:
+        st.error(f"Error finding player: {e}")
+        return None
+
+def create_new_player(email: str, name: str, tennis_level: str, primary_goals: list, learning_style: str):
+    """Create new player record in SSS Players table"""
+    try:
+        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Players"
+        headers = {
+            "Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}",
+            "Content-Type": "application/json"
+        }
+        
+        data = {
+            "fields": {
+                "email": email,
+                "name": name,
+                "tennis_level": tennis_level,
+                "primary_goals": primary_goals,
+                "learning_style": learning_style,
+                "personality_notes": "",
+                "total_sessions": 1,
+                "first_session_date": time.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                "last_session_date": time.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                "player_status": "Active"
+            }
+        }
+        
+        response = requests.post(url, headers=headers, json=data)
+        if response.status_code == 200:
+            return response.json()
+        return None
+    except Exception as e:
+        st.error(f"Error creating player: {e}")
+        return None
+
+def update_player_session_count(player_record_id: str):
+    """Update player's total sessions and last session date"""
+    try:
+        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Players/{player_record_id}"
+        headers = {
+            "Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}",
+            "Content-Type": "application/json"
+        }
+        
+        # First get current session count
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            current_data = response.json()
+            current_sessions = current_data.get('fields', {}).get('total_sessions', 0)
+            
+            # Update with incremented count
+            update_data = {
+                "fields": {
+                    "total_sessions": current_sessions + 1,
+                    "last_session_date": time.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+                }
+            }
+            
+            update_response = requests.patch(url, headers=headers, json=update_data)
+            return update_response.status_code == 200
+        return False
+    except Exception as e:
+        st.error(f"Error updating player: {e}")
+        return False
+
 def main():
     st.set_page_config(
         page_title="Tennis Coach AI",
@@ -267,7 +345,7 @@ def main():
                         for j, chunk in enumerate(entry['chunks']):
                             st.markdown(f"  - Resource {j+1}: {chunk['topics']} (score: {chunk['score']:.3f})")
     
-    # Updated player setup with email collection
+    # Updated player setup with email collection and SSS integration
     if not st.session_state.get("player_setup_complete"):
         with st.form("player_setup"):
             st.markdown("### 🎾 Welcome to Tennis Coach AI")
@@ -316,53 +394,96 @@ def main():
                 elif not player_name:
                     st.error("Please enter your name.")
                 else:
-                    # Store player info in session state
-                    st.session_state.player_email = player_email
-                    st.session_state.player_name = player_name
-                    st.session_state.tennis_level = tennis_level
-                    st.session_state.primary_goals = primary_goals
-                    st.session_state.learning_style = learning_style
-                    st.session_state.player_setup_complete = True
-                    
-                    # Initialize session variables
-                    session_id = str(uuid.uuid4())[:8]
-                    st.session_state.session_id = session_id
-                    st.session_state.airtable_record_id = None
-                    st.session_state.messages = []
-                    st.session_state.conversation_log = []
-                    st.session_state.message_counter = 0
-                    
-                    # Create session record (using old system for now)
-                    airtable_record_id = create_session_record(session_id, player_name)
-                    if airtable_record_id:
-                        st.session_state.airtable_record_id = airtable_record_id
-                    
-                    # Welcome message
-                    welcome_msg = f"""👋 Hi {player_name}! I'm your Coach TA. 
-                    
-I see you're a {tennis_level.lower()} player focusing on {', '.join(primary_goals).lower()}. What shall we work on today?
+                    with st.spinner("Setting up your coaching session..."):
+                        # Look up existing player
+                        existing_player = find_player_by_email(player_email)
+                        
+                        if existing_player:
+                            # Returning player
+                            player_data = existing_player['fields']
+                            st.session_state.player_record_id = existing_player['id']
+                            st.session_state.is_returning_player = True
+                            st.session_state.previous_sessions = player_data.get('total_sessions', 0)
+                            
+                            # Update session count
+                            update_player_session_count(existing_player['id'])
+                            
+                            welcome_type = "returning"
+                            session_info = f"This is session #{player_data.get('total_sessions', 0) + 1}"
+                            
+                        else:
+                            # New player
+                            new_player = create_new_player(player_email, player_name, tennis_level, primary_goals, learning_style)
+                            if new_player:
+                                st.session_state.player_record_id = new_player['id']
+                                st.session_state.is_returning_player = False
+                                st.session_state.previous_sessions = 0
+                                welcome_type = "new"
+                                session_info = "Welcome to your first session!"
+                            else:
+                                st.error("Error creating player profile. Please try again.")
+                                return
+                        
+                        # Store player info in session state
+                        st.session_state.player_email = player_email
+                        st.session_state.player_name = player_name
+                        st.session_state.tennis_level = tennis_level
+                        st.session_state.primary_goals = primary_goals
+                        st.session_state.learning_style = learning_style
+                        st.session_state.player_setup_complete = True
+                        
+                        # Initialize session variables
+                        session_id = str(uuid.uuid4())[:8]
+                        st.session_state.session_id = session_id
+                        st.session_state.airtable_record_id = None
+                        st.session_state.messages = []
+                        st.session_state.conversation_log = []
+                        st.session_state.message_counter = 0
+                        
+                        # Create session record (using old system for now)
+                        airtable_record_id = create_session_record(session_id, player_name)
+                        if airtable_record_id:
+                            st.session_state.airtable_record_id = airtable_record_id
+                        
+                        # Personalized welcome message
+                        if welcome_type == "returning":
+                            welcome_msg = f"""👋 Welcome back, {player_name}! Great to see you again.
+                            
+{session_info} - I remember you're a {tennis_level.lower()} player working on {', '.join(primary_goals).lower()}. 
+
+What would you like to focus on in today's session?"""
+                        else:
+                            welcome_msg = f"""👋 Hi {player_name}! I'm your tennis coach, and {session_info}
+                            
+I see you're a {tennis_level.lower()} player focusing on {', '.join(primary_goals).lower()}. What would you like to work on today?
 
 I can help with technique, strategy, mental game, or any specific issues you're having on court."""
-                    
-                    st.session_state.messages = [{"role": "assistant", "content": welcome_msg}]
-                    st.session_state.conversation_log = [{
-                        "role": "assistant", 
-                        "content": welcome_msg,
-                        "timestamp": time.time()
-                    }]
-                    
-                    st.success(f"Welcome {player_name}! Let's start your coaching session.")
-                    st.rerun()
+                        
+                        st.session_state.messages = [{"role": "assistant", "content": welcome_msg}]
+                        st.session_state.conversation_log = [{
+                            "role": "assistant", 
+                            "content": welcome_msg,
+                            "timestamp": time.time()
+                        }]
+                        
+                        success_msg = f"Welcome {player_name}! " + ("Returning player recognized." if welcome_type == "returning" else "New player profile created.")
+                        st.success(success_msg)
+                        st.rerun()
         return
     
     # Debug info (temporary - remove later)
     if st.session_state.get("player_setup_complete"):
-        with st.expander("🔍 Debug: Player Info Stored"):
+        with st.expander("🔍 Debug: Player Info & SSS Integration"):
             st.write("Email:", st.session_state.get("player_email"))
             st.write("Name:", st.session_state.get("player_name"))
             st.write("Level:", st.session_state.get("tennis_level"))
             st.write("Goals:", st.session_state.get("primary_goals"))
             st.write("Style:", st.session_state.get("learning_style"))
+            st.write("---")
+            st.write("**SSS Integration:**")
+            st.write("Player Record ID:", st.session_state.get("player_record_id"))
+            st.write("Returning Player:", st.session_state.get("is_returning_player"))
+            st.write("Previous Sessions:", st.session_state.get("previous_sessions"))
     
     # Display conversation messages
     for message in st.session_state.messages:
