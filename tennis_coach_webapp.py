@@ -353,7 +353,207 @@ def mark_session_completed(player_record_id: str, session_id: str) -> bool:
     except Exception as e:
         return False
 
-def show_session_end_message():
+def get_session_messages(player_record_id: str, session_id: str) -> list:
+    """Retrieve all messages from a completed session"""
+    try:
+        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
+        headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
+        
+        session_id_number = int(''.join(filter(str.isdigit, session_id))) if session_id else 1
+        
+        params = {
+            "filterByFormula": f"{{session_id}} = {session_id_number}",
+            "sort[0][field]": "message_order",
+            "sort[0][direction]": "asc"
+        }
+        
+        response = requests.get(url, headers=headers, params=params)
+        if response.status_code == 200:
+            records = response.json().get('records', [])
+            messages = []
+            for record in records:
+                fields = record.get('fields', {})
+                messages.append({
+                    'role': fields.get('role', ''),
+                    'content': fields.get('message_content', ''),
+                    'order': fields.get('message_order', 0)
+                })
+            return messages
+        return []
+    except Exception as e:
+        return []
+
+def generate_session_summary(messages: list, claude_client) -> dict:
+    """Use Claude to generate structured session summary"""
+    try:
+        # Build conversation text for analysis
+        conversation_text = ""
+        for msg in messages:
+            role_label = "Player" if msg['role'] == 'player' else "Coach"
+            conversation_text += f"{role_label}: {msg['content']}\n\n"
+        
+        summary_prompt = f"""Analyze this tennis coaching session and extract key information. The session is between a coach and player working on tennis improvement.
+
+CONVERSATION:
+{conversation_text}
+
+Please analyze and provide a structured summary with these exact sections:
+
+TECHNICAL_FOCUS: What specific tennis techniques were discussed or worked on? (e.g., forehand grip, serve motion, backhand slice)
+
+MENTAL_GAME: Any mindset, confidence, or mental approach topics covered? (e.g., staying calm, visualization, match preparation)
+
+HOMEWORK_ASSIGNED: What practice tasks or exercises were given to the player? (e.g., wall hitting, shadow swings, specific drills)
+
+NEXT_SESSION_FOCUS: Based on this session, what should be the priority for the next coaching session?
+
+KEY_BREAKTHROUGHS: Any important progress moments, "aha" moments, or skill improvements noted?
+
+CONDENSED_SUMMARY: Write a concise 200-300 token summary capturing the essence of this coaching session, focusing on what was learned and accomplished.
+
+Format your response exactly like this:
+TECHNICAL_FOCUS: [your analysis]
+MENTAL_GAME: [your analysis]  
+HOMEWORK_ASSIGNED: [your analysis]
+NEXT_SESSION_FOCUS: [your analysis]
+KEY_BREAKTHROUGHS: [your analysis]
+CONDENSED_SUMMARY: [your analysis]"""
+
+        response = claude_client.messages.create(
+            model="claude-3-5-sonnet-20241022",
+            max_tokens=800,
+            messages=[{"role": "user", "content": summary_prompt}]
+        )
+        
+        summary_text = response.content[0].text
+        
+        # Parse the structured response
+        summary_data = {}
+        current_section = None
+        current_content = []
+        
+        for line in summary_text.split('\n'):
+            line = line.strip()
+            if line.startswith('TECHNICAL_FOCUS:'):
+                if current_section:
+                    summary_data[current_section] = ' '.join(current_content).strip()
+                current_section = 'technical_focus'
+                current_content = [line.replace('TECHNICAL_FOCUS:', '').strip()]
+            elif line.startswith('MENTAL_GAME:'):
+                if current_section:
+                    summary_data[current_section] = ' '.join(current_content).strip()
+                current_section = 'mental_game_notes'
+                current_content = [line.replace('MENTAL_GAME:', '').strip()]
+            elif line.startswith('HOMEWORK_ASSIGNED:'):
+                if current_section:
+                    summary_data[current_section] = ' '.join(current_content).strip()
+                current_section = 'homework_assigned'
+                current_content = [line.replace('HOMEWORK_ASSIGNED:', '').strip()]
+            elif line.startswith('NEXT_SESSION_FOCUS:'):
+                if current_section:
+                    summary_data[current_section] = ' '.join(current_content).strip()
+                current_section = 'next_session_focus'
+                current_content = [line.replace('NEXT_SESSION_FOCUS:', '').strip()]
+            elif line.startswith('KEY_BREAKTHROUGHS:'):
+                if current_section:
+                    summary_data[current_section] = ' '.join(current_content).strip()
+                current_section = 'key_breakthroughs'
+                current_content = [line.replace('KEY_BREAKTHROUGHS:', '').strip()]
+            elif line.startswith('CONDENSED_SUMMARY:'):
+                if current_section:
+                    summary_data[current_section] = ' '.join(current_content).strip()
+                current_section = 'condensed_summary'
+                current_content = [line.replace('CONDENSED_SUMMARY:', '').strip()]
+            elif line and current_section:
+                current_content.append(line)
+        
+        # Don't forget the last section
+        if current_section:
+            summary_data[current_section] = ' '.join(current_content).strip()
+        
+        return summary_data
+        
+    except Exception as e:
+        # Return empty summary if generation fails
+        return {
+            'technical_focus': 'Summary generation failed',
+            'mental_game_notes': '',
+            'homework_assigned': '',
+            'next_session_focus': 'Continue working on tennis fundamentals',
+            'key_breakthroughs': '',
+            'condensed_summary': 'Coaching session completed but summary generation encountered an error.'
+        }
+
+def save_session_summary(player_record_id: str, session_number: int, summary_data: dict, original_message_count: int) -> bool:
+    """Save the generated summary to Session_Summaries table"""
+    try:
+        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Session_Summaries"
+        headers = {
+            "Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}",
+            "Content-Type": "application/json"
+        }
+        
+        # Calculate token savings (rough estimate)
+        original_tokens = original_message_count * 50  # Rough estimate
+        summary_tokens = len(summary_data.get('condensed_summary', '').split()) * 1.3
+        token_savings = max(0, original_tokens - summary_tokens)
+        
+        data = {
+            "fields": {
+                "player_id": [player_record_id],
+                "session_number": session_number,
+                "session_date": time.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                "technical_focus": summary_data.get('technical_focus', '')[:1000],
+                "mental_game_notes": summary_data.get('mental_game_notes', '')[:1000],
+                "homework_assigned": summary_data.get('homework_assigned', '')[:1000], 
+                "next_session_focus": summary_data.get('next_session_focus', '')[:1000],
+                "key_breakthroughs": summary_data.get('key_breakthroughs', '')[:1000],
+                "condensed_summary": summary_data.get('condensed_summary', '')[:2000],
+                "original_msg_count": original_message_count,
+                "token_cost_saved": round(token_savings, 2)
+            }
+        }
+        
+        response = requests.post(url, headers=headers, json=data)
+        return response.status_code == 200
+        
+    except Exception as e:
+        return False
+
+def process_completed_session(player_record_id: str, session_id: str, claude_client) -> bool:
+    """Complete session processing: generate summary and save"""
+    try:
+        # Get all messages from the session
+        messages = get_session_messages(player_record_id, session_id)
+        if not messages:
+            return False
+        
+        # Generate summary using Claude
+        summary_data = generate_session_summary(messages, claude_client)
+        
+        # Get player info to determine session number
+        player_url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Players/{player_record_id}"
+        headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
+        
+        player_response = requests.get(player_url, headers=headers)
+        if player_response.status_code == 200:
+            player_data = player_response.json()
+            session_number = player_data.get('fields', {}).get('total_sessions', 1)
+        else:
+            session_number = 1
+        
+        # Save summary to Session_Summaries table
+        summary_saved = save_session_summary(
+            player_record_id, 
+            session_number, 
+            summary_data, 
+            len(messages)
+        )
+        
+        return summary_saved
+        
+    except Exception as e:
+        return False
     """Display session completion message"""
     st.success("🎾 **Session Complete!** Thanks for training with Coach TA today.")
     st.info("💡 **Your session has been saved.** When you return, I'll remember what we worked on and continue building on your progress!")
@@ -659,6 +859,18 @@ I can help with technique, strategy, mental game, or any specific issues you're 
                     )
                     if session_marked:
                         st.success("✅ Session marked as completed!")
+                        
+                        # Generate session summary
+                        with st.spinner("🧠 Generating session summary..."):
+                            summary_created = process_completed_session(
+                                st.session_state.player_record_id,
+                                st.session_state.session_id,
+                                claude_client
+                            )
+                            if summary_created:
+                                st.success("📝 Session summary generated and saved!")
+                            else:
+                                st.warning("⚠️ Session completed but summary generation had issues.")
                 
                 # Show session end options
                 show_session_end_message()
