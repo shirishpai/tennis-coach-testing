@@ -350,6 +350,72 @@ def update_player_session_count(player_record_id: str):
         st.error(f"Error updating player: {e}")
         return False
 
+def log_message_to_sss(player_record_id: str, session_id: str, message_order: int, role: str, content: str, chunks=None) -> bool:
+    """Log message to SSS Active_Sessions table"""
+    try:
+        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
+        headers = {
+            "Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}",
+            "Content-Type": "application/json"
+        }
+        
+        # Calculate token count (rough estimate)
+        token_count = len(content.split()) * 1.3  # Rough token estimation
+        
+        data = {
+            "fields": {
+                "player_id": [player_record_id],  # Link to Players table
+                "session_id": session_id,
+                "message_order": message_order,
+                "role": role,
+                "message_content": content[:100000],  # Airtable field limit
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                "token_count": int(token_count),
+                "session_status": "active"
+            }
+        }
+        
+        # Debug: Show what we're sending to SSS
+        st.write(f"**SSS Message Log Debug:**")
+        st.write(f"Player ID: {player_record_id}")
+        st.write(f"Session ID: {session_id}")
+        st.write(f"Message #{message_order}: {role}")
+        st.write(f"Content length: {len(content)} chars")
+        st.write(f"Estimated tokens: {int(token_count)}")
+        
+        response = requests.post(url, headers=headers, json=data)
+        
+        st.write(f"**SSS Log Response:**")
+        st.write(f"Status: {response.status_code}")
+        if response.status_code != 200:
+            st.write(f"Error: {response.text}")
+        else:
+            st.write("✅ Message logged to SSS successfully!")
+        
+        return response.status_code == 200
+    except Exception as e:
+        st.error(f"Error logging to SSS: {e}")
+        return False
+
+def test_active_sessions_connection():
+    """Test if we can connect to Active_Sessions table"""
+    try:
+        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
+        headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
+        
+        response = requests.get(url, headers=headers)
+        st.write(f"**Active_Sessions Table Test:**")
+        st.write(f"Status: {response.status_code}")
+        if response.status_code != 200:
+            st.write(f"Error: {response.text}")
+        else:
+            st.write("✅ Active_Sessions table accessible!")
+            data = response.json()
+            st.write(f"Current active messages: {len(data.get('records', []))}")
+        
+    except Exception as e:
+        st.error(f"Active_Sessions test failed: {e}")
+
 def main():
     st.set_page_config(
         page_title="Tennis Coach AI",
@@ -441,8 +507,9 @@ def main():
                     st.error("Please enter your name.")
                 else:
                     with st.spinner("Setting up your coaching session..."):
-                        # Test connection first
+                        # Test connections first
                         test_players_table_connection()
+                        test_active_sessions_connection()
                         
                         # Look up existing player
                         existing_player = find_player_by_email(player_email)
@@ -517,6 +584,16 @@ I can help with technique, strategy, mental game, or any specific issues you're 
                             "timestamp": time.time()
                         }]
                         
+                        # Log welcome message to SSS
+                        if st.session_state.get("player_record_id"):
+                            log_message_to_sss(
+                                st.session_state.player_record_id,
+                                session_id,
+                                0,  # Welcome message is #0
+                                "assistant",
+                                welcome_msg
+                            )
+                        
                         success_msg = f"Welcome {player_name}! " + ("Returning player recognized." if welcome_type == "returning" else "New player profile created.")
                         st.success(success_msg)
                         st.rerun()
@@ -535,6 +612,7 @@ I can help with technique, strategy, mental game, or any specific issues you're 
             st.write("Player Record ID:", st.session_state.get("player_record_id"))
             st.write("Returning Player:", st.session_state.get("is_returning_player"))
             st.write("Previous Sessions:", st.session_state.get("previous_sessions"))
+            st.write("Current Session ID:", st.session_state.get("session_id"))
     
     # Display conversation messages
     for message in st.session_state.messages:
@@ -552,9 +630,20 @@ I can help with technique, strategy, mental game, or any specific issues you're 
             "timestamp": time.time()
         })
         
+        # Log user message to both systems (old and SSS)
         if st.session_state.get("airtable_record_id"):
             log_message(
                 st.session_state.airtable_record_id,
+                st.session_state.message_counter,
+                "user",
+                prompt
+            )
+        
+        # Log to SSS Active_Sessions
+        if st.session_state.get("player_record_id"):
+            log_message_to_sss(
+                st.session_state.player_record_id,
+                st.session_state.session_id,
                 st.session_state.message_counter,
                 "user",
                 prompt
@@ -593,9 +682,21 @@ I can help with technique, strategy, mental game, or any specific issues you're 
                         "prompt_used": full_prompt
                     })
                     
+                    # Log assistant response to both systems
                     if st.session_state.get("airtable_record_id"):
                         log_message(
                             st.session_state.airtable_record_id,
+                            st.session_state.message_counter,
+                            "assistant",
+                            response,
+                            chunks
+                        )
+                    
+                    # Log to SSS Active_Sessions
+                    if st.session_state.get("player_record_id"):
+                        log_message_to_sss(
+                            st.session_state.player_record_id,
+                            st.session_state.session_id,
                             st.session_state.message_counter,
                             "assistant",
                             response,
@@ -616,9 +717,20 @@ I can help with technique, strategy, mental game, or any specific issues you're 
                         "timestamp": time.time()
                     })
                     
+                    # Log error message to both systems
                     if st.session_state.get("airtable_record_id"):
                         log_message(
                             st.session_state.airtable_record_id,
+                            st.session_state.message_counter,
+                            "assistant",
+                            error_msg
+                        )
+                    
+                    # Log to SSS Active_Sessions
+                    if st.session_state.get("player_record_id"):
+                        log_message_to_sss(
+                            st.session_state.player_record_id,
+                            st.session_state.session_id,
                             st.session_state.message_counter,
                             "assistant",
                             error_msg
