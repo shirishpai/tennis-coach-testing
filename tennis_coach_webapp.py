@@ -240,14 +240,13 @@ def create_new_player(email: str):
             "Content-Type": "application/json"
         }
         
-        # Create minimal player record - coach will gather details during conversation
         data = {
             "fields": {
                 "email": email,
-                "name": "",  # Coach will ask
-                "tennis_level": "Unknown",  # Coach will assess
-                "primary_goals": [],  # Coach will discover
-                "learning_style": "Unknown",  # Coach will determine
+                "name": "",
+                "tennis_level": "Unknown",
+                "primary_goals": [],
+                "learning_style": "Unknown",
                 "personality_notes": "",
                 "total_sessions": 1,
                 "first_session_date": time.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
@@ -299,12 +298,10 @@ def detect_session_end(message_content: str) -> bool:
     
     message_lower = message_content.lower().strip()
     
-    # Check for goodbye phrases
     for phrase in goodbye_phrases:
         if phrase in message_lower:
             return True
     
-    # Check for short messages that sound like endings
     if len(message_lower.split()) <= 3:
         ending_words = ["thanks", "bye", "done", "good", "great"]
         if any(word in message_lower for word in ending_words):
@@ -315,13 +312,11 @@ def detect_session_end(message_content: str) -> bool:
 def mark_session_completed(player_record_id: str, session_id: str) -> bool:
     """Mark all active messages for this session as completed"""
     try:
-        # First, get all active messages for this session
         url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
         headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
         
         session_id_number = int(''.join(filter(str.isdigit, session_id))) if session_id else 1
         
-        # Find all records for this session
         params = {
             "filterByFormula": f"AND({{session_id}} = {session_id_number}, {{session_status}} = 'active')"
         }
@@ -330,7 +325,6 @@ def mark_session_completed(player_record_id: str, session_id: str) -> bool:
         if response.status_code == 200:
             records = response.json().get('records', [])
             
-            # Update each record to completed
             update_headers = {
                 "Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}",
                 "Content-Type": "application/json"
@@ -386,7 +380,6 @@ def get_session_messages(player_record_id: str, session_id: str) -> list:
 def generate_session_summary(messages: list, claude_client) -> dict:
     """Use Claude to generate structured session summary"""
     try:
-        # Build conversation text for analysis
         conversation_text = ""
         for msg in messages:
             role_label = "Player" if msg['role'] == 'player' else "Coach"
@@ -427,7 +420,6 @@ CONDENSED_SUMMARY: [your analysis]"""
         
         summary_text = response.content[0].text
         
-        # Parse the structured response
         summary_data = {}
         current_section = None
         current_content = []
@@ -467,14 +459,12 @@ CONDENSED_SUMMARY: [your analysis]"""
             elif line and current_section:
                 current_content.append(line)
         
-        # Don't forget the last section
         if current_section:
             summary_data[current_section] = ' '.join(current_content).strip()
         
         return summary_data
         
     except Exception as e:
-        # Return empty summary if generation fails
         return {
             'technical_focus': 'Summary generation failed',
             'mental_game_notes': '',
@@ -493,8 +483,7 @@ def save_session_summary(player_record_id: str, session_number: int, summary_dat
             "Content-Type": "application/json"
         }
         
-        # Calculate token savings (rough estimate)
-        original_tokens = original_message_count * 50  # Rough estimate
+        original_tokens = original_message_count * 50
         summary_tokens = len(summary_data.get('condensed_summary', '').split()) * 1.3
         token_savings = max(0, original_tokens - summary_tokens)
         
@@ -523,15 +512,12 @@ def save_session_summary(player_record_id: str, session_number: int, summary_dat
 def process_completed_session(player_record_id: str, session_id: str, claude_client) -> bool:
     """Complete session processing: generate summary and save"""
     try:
-        # Get all messages from the session
         messages = get_session_messages(player_record_id, session_id)
         if not messages:
             return False
         
-        # Generate summary using Claude
         summary_data = generate_session_summary(messages, claude_client)
         
-        # Get player info to determine session number
         player_url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Players/{player_record_id}"
         headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
         
@@ -542,7 +528,6 @@ def process_completed_session(player_record_id: str, session_id: str, claude_cli
         else:
             session_number = 1
         
-        # Save summary to Session_Summaries table
         summary_saved = save_session_summary(
             player_record_id, 
             session_number, 
@@ -554,14 +539,15 @@ def process_completed_session(player_record_id: str, session_id: str, claude_cli
         
     except Exception as e:
         return False
+
+def show_session_end_message():
     """Display session completion message"""
     st.success("🎾 **Session Complete!** Thanks for training with Coach TA today.")
     st.info("💡 **Your session has been saved.** When you return, I'll remember what we worked on and continue building on your progress!")
     
     if st.button("🔄 Start New Session", type="primary"):
-        # Reset session state for new session
         for key in list(st.session_state.keys()):
-            if key not in ['player_email', 'player_record_id']:  # Keep login info
+            if key not in ['player_email', 'player_record_id']:
                 del st.session_state[key]
         st.rerun()
 
@@ -574,48 +560,8 @@ def log_message_to_sss(player_record_id: str, session_id: str, message_order: in
             "Content-Type": "application/json"
         }
         
-        # Calculate token count (rough estimate)
         token_count = len(content.split()) * 1.3
-        
-        # Map role values to match dropdown options
         role_value = "coach" if role == "assistant" else "player"
-        
-        # Convert session_id to number
-        session_id_number = int(''.join(filter(str.isdigit, session_id))) if session_id else 1
-        
-        data = {
-            "fields": {
-                "player_id": [player_record_id],
-                "session_id": session_id_number,
-                "message_order": message_order,
-                "role": role_value,
-                "message_content": content[:100000],
-                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
-                "token_count": int(token_count),
-                "session_status": "active"
-            }
-        }
-        
-        response = requests.post(url, headers=headers, json=data)
-        return response.status_code == 200
-        
-    except Exception as e:
-        return False
-    """Log message to SSS Active_Sessions table"""
-    try:
-        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
-        headers = {
-            "Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}",
-            "Content-Type": "application/json"
-        }
-        
-        # Calculate token count (rough estimate)
-        token_count = len(content.split()) * 1.3
-        
-        # Map role values to match dropdown options
-        role_value = "coach" if role == "assistant" else "player"
-        
-        # Convert session_id to number
         session_id_number = int(''.join(filter(str.isdigit, session_id))) if session_id else 1
         
         data = {
@@ -678,13 +624,11 @@ def main():
                         for j, chunk in enumerate(entry['chunks']):
                             st.markdown(f"  - Resource {j+1}: {chunk['topics']} (score: {chunk['score']:.3f})")
     
-    # Simplified player setup - just email
     if not st.session_state.get("player_setup_complete"):
         with st.form("player_setup"):
             st.markdown("### 🎾 Welcome to Tennis Coach AI")
             st.markdown("**Quick setup:**")
             
-            # Only email collection
             player_email = st.text_input(
                 "Email address", 
                 placeholder="your.email@example.com",
@@ -692,30 +636,25 @@ def main():
             )
             
             if st.form_submit_button("Start Coaching Session", type="primary"):
-                # Validation
                 if not player_email or "@" not in player_email:
                     st.error("Please enter a valid email address.")
                 else:
                     with st.spinner("Setting up your coaching session..."):
-                        # Look up existing player
                         existing_player = find_player_by_email(player_email)
                         
                         if existing_player:
-                            # Returning player
                             player_data = existing_player['fields']
                             st.session_state.player_record_id = existing_player['id']
                             st.session_state.is_returning_player = True
                             st.session_state.previous_sessions = player_data.get('total_sessions', 0)
                             player_name = player_data.get('name', 'there')
                             
-                            # Update session count
                             update_player_session_count(existing_player['id'])
                             
                             welcome_type = "returning"
                             session_info = f"This is session #{player_data.get('total_sessions', 0) + 1}"
                             
                         else:
-                            # New player
                             new_player = create_new_player(player_email)
                             if new_player:
                                 st.session_state.player_record_id = new_player['id']
@@ -728,11 +667,9 @@ def main():
                                 st.error("Error creating player profile. Please try again.")
                                 return
                         
-                        # Store player info in session state
                         st.session_state.player_email = player_email
                         st.session_state.player_setup_complete = True
                         
-                        # Initialize session variables
                         session_id = str(uuid.uuid4())[:8]
                         st.session_state.session_id = session_id
                         st.session_state.airtable_record_id = None
@@ -740,12 +677,10 @@ def main():
                         st.session_state.conversation_log = []
                         st.session_state.message_counter = 0
                         
-                        # Create session record (using old system for backup)
                         airtable_record_id = create_session_record(session_id, player_email)
                         if airtable_record_id:
                             st.session_state.airtable_record_id = airtable_record_id
                         
-                        # Updated welcome message
                         if welcome_type == "returning":
                             welcome_msg = f"""👋 Hi! This is your Coach TA. Great to see you back, {player_name}!
                             
@@ -764,7 +699,6 @@ I can help with technique, strategy, mental game, or any specific issues you're 
                             "timestamp": time.time()
                         }]
                         
-                        # Log welcome message to SSS
                         if st.session_state.get("player_record_id"):
                             log_message_to_sss(
                                 st.session_state.player_record_id,
@@ -778,20 +712,16 @@ I can help with technique, strategy, mental game, or any specific issues you're 
                         st.rerun()
         return
     
-    # Display conversation messages
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
     
-    # Chat input
     if prompt := st.chat_input("Ask your tennis coach..."):
-        # Check for session ending before processing
         if detect_session_end(prompt):
             st.session_state.session_ending = True
         
         st.session_state.message_counter += 1
         
-        st.session_state.messages.append({"role": "user", "content": prompt})
         st.session_state.conversation_log.append({
             "role": "user", 
             "content": prompt,
