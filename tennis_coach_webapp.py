@@ -362,13 +362,17 @@ def log_message_to_sss(player_record_id: str, session_id: str, message_order: in
         # Calculate token count (rough estimate)
         token_count = len(content.split()) * 1.3  # Rough token estimation
         
+        # Map role values to match your dropdown options
+        role_value = "Coach" if role == "assistant" else "Player"
+        
+        # Try with corrected role values
         data = {
             "fields": {
                 "player_id": [player_record_id],  # Link to Players table
                 "session_id": session_id,
                 "message_order": message_order,
-                "role": role,
-                "message_content": content[:100000],  # Airtable field limit
+                "role": role_value,  # Now using correct dropdown values
+                "message_content": content[:100000],
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
                 "token_count": int(token_count),
                 "session_status": "active"
@@ -376,12 +380,15 @@ def log_message_to_sss(player_record_id: str, session_id: str, message_order: in
         }
         
         # Debug: Show what we're sending to SSS
-        st.write(f"**SSS Message Log Debug:**")
+        st.write(f"**SSS Message Log Debug (Fixed Role Values):**")
         st.write(f"Player ID: {player_record_id}")
         st.write(f"Session ID: {session_id}")
-        st.write(f"Message #{message_order}: {role}")
+        st.write(f"Message #{message_order}: {role} → {role_value}")
         st.write(f"Content length: {len(content)} chars")
         st.write(f"Estimated tokens: {int(token_count)}")
+        
+        st.write("**Data being sent:**")
+        st.json(data)
         
         response = requests.post(url, headers=headers, json=data)
         
@@ -389,10 +396,30 @@ def log_message_to_sss(player_record_id: str, session_id: str, message_order: in
         st.write(f"Status: {response.status_code}")
         if response.status_code != 200:
             st.write(f"Error: {response.text}")
+            
+            # If still failing, try without session_id
+            st.write("**Trying without session_id field:**")
+            data_no_session = {
+                "fields": {
+                    "player_id": [player_record_id],
+                    "message_order": message_order,
+                    "role": role_value,
+                    "message_content": content[:100000],
+                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                    "token_count": int(token_count),
+                    "session_status": "active"
+                }
+            }
+            
+            response2 = requests.post(url, headers=headers, json=data_no_session)
+            st.write(f"Without session_id - Status: {response2.status_code}")
+            st.write(f"Without session_id - Response: {response2.text}")
+            
+            return response2.status_code == 200
         else:
             st.write("✅ Message logged to SSS successfully!")
+            return True
         
-        return response.status_code == 200
     except Exception as e:
         st.error(f"Error logging to SSS: {e}")
         return False
