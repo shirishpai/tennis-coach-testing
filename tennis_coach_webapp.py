@@ -283,6 +283,7 @@ def create_new_player(email: str, name: str, tennis_level: str, primary_goals: l
             "Content-Type": "application/json"
         }
         
+        # Only include fields that aren't computed/formula fields
         data = {
             "fields": {
                 "email": email,
@@ -293,13 +294,13 @@ def create_new_player(email: str, name: str, tennis_level: str, primary_goals: l
                 "personality_notes": "",
                 "total_sessions": 1,
                 "first_session_date": time.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
-                "last_session_date": time.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
                 "player_status": "Active"
+                # Removed last_session_date - it's a computed field
             }
         }
         
         # Debug: Show what we're sending
-        st.write("**Debug - Data being sent:**")
+        st.write("**Debug - Data being sent (fixed):**")
         st.json(data)
         
         response = requests.post(url, headers=headers, json=data)
@@ -310,14 +311,17 @@ def create_new_player(email: str, name: str, tennis_level: str, primary_goals: l
         st.write(f"Response Text: {response.text}")
         
         if response.status_code == 200:
+            st.success("✅ Player created successfully!")
             return response.json()
+        else:
+            st.error(f"❌ Still getting error: {response.text}")
         return None
     except Exception as e:
         st.error(f"Error creating player: {e}")
         return None
 
 def update_player_session_count(player_record_id: str):
-    """Update player's total sessions and last session date"""
+    """Update player's total sessions (last_session_date is computed)"""
     try:
         url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Players/{player_record_id}"
         headers = {
@@ -331,11 +335,11 @@ def update_player_session_count(player_record_id: str):
             current_data = response.json()
             current_sessions = current_data.get('fields', {}).get('total_sessions', 0)
             
-            # Update with incremented count
+            # Update only total_sessions (last_session_date is computed)
             update_data = {
                 "fields": {
-                    "total_sessions": current_sessions + 1,
-                    "last_session_date": time.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+                    "total_sessions": current_sessions + 1
+                    # Removed last_session_date update - it's computed
                 }
             }
             
