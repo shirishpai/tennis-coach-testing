@@ -288,7 +288,82 @@ def update_player_session_count(player_record_id: str):
     except Exception as e:
         return False
 
-def log_message_to_sss(player_record_id: str, session_id: str, message_order: int, role: str, content: str, chunks=None) -> bool:
+def detect_session_end(message_content: str) -> bool:
+    """Detect if user message indicates session should end"""
+    goodbye_phrases = [
+        "thanks", "thank you", "bye", "goodbye", "see you", "done", 
+        "that's all", "finished", "end session", "stop", "quit",
+        "done for today", "good session", "catch you later", "later",
+        "gotta go", "have to go", "thanks coach", "thank you coach"
+    ]
+    
+    message_lower = message_content.lower().strip()
+    
+    # Check for goodbye phrases
+    for phrase in goodbye_phrases:
+        if phrase in message_lower:
+            return True
+    
+    # Check for short messages that sound like endings
+    if len(message_lower.split()) <= 3:
+        ending_words = ["thanks", "bye", "done", "good", "great"]
+        if any(word in message_lower for word in ending_words):
+            return True
+    
+    return False
+
+def mark_session_completed(player_record_id: str, session_id: str) -> bool:
+    """Mark all active messages for this session as completed"""
+    try:
+        # First, get all active messages for this session
+        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
+        headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
+        
+        session_id_number = int(''.join(filter(str.isdigit, session_id))) if session_id else 1
+        
+        # Find all records for this session
+        params = {
+            "filterByFormula": f"AND({{session_id}} = {session_id_number}, {{session_status}} = 'active')"
+        }
+        
+        response = requests.get(url, headers=headers, params=params)
+        if response.status_code == 200:
+            records = response.json().get('records', [])
+            
+            # Update each record to completed
+            update_headers = {
+                "Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}",
+                "Content-Type": "application/json"
+            }
+            
+            for record in records:
+                record_id = record['id']
+                update_url = f"{url}/{record_id}"
+                update_data = {
+                    "fields": {
+                        "session_status": "completed"
+                    }
+                }
+                
+                requests.patch(update_url, headers=update_headers, json=update_data)
+            
+            return len(records) > 0
+        
+        return False
+    except Exception as e:
+        return False
+
+def show_session_end_message():
+    """Display session completion message"""
+    st.success("🎾 **Session Complete!** Thanks for training with Coach TA today.")
+    st.info("💡 **Your session has been saved.** When you return, I'll remember what we worked on and continue building on your progress!")
+    
+    if st.button("🔄 Start New Session", type="primary"):
+        # Reset session state for new session
+        for key in list(st.session_state.keys()):
+            if key not in ['player_email', 'player_record_id']:  # Keep login info
+                del st.session_state[key]
+        st.rerun()
     """Log message to SSS Active_Sessions table"""
     try:
         url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
@@ -473,6 +548,10 @@ I can help with technique, strategy, mental game, or any specific issues you're 
     
     # Chat input
     if prompt := st.chat_input("Ask your tennis coach..."):
+        # Check for session ending before processing
+        if detect_session_end(prompt):
+            st.session_state.session_ending = True
+        
         st.session_state.message_counter += 1
         
         st.session_state.messages.append({"role": "user", "content": prompt})
@@ -504,6 +583,51 @@ I can help with technique, strategy, mental game, or any specific issues you're 
         with st.chat_message("user"):
             st.markdown(prompt)
         
+        # If session is ending, provide closing response and mark as completed
+        if st.session_state.get("session_ending"):
+            with st.chat_message("assistant"):
+                closing_response = "Great session today! I've saved our progress and I'll remember what we worked on. Keep practicing those techniques, and I'll be here whenever you need coaching support. Take care! 🎾"
+                st.markdown(closing_response)
+                
+                # Log closing response
+                st.session_state.message_counter += 1
+                st.session_state.messages.append({
+                    "role": "assistant", 
+                    "content": closing_response
+                })
+                
+                # Log to both systems
+                if st.session_state.get("airtable_record_id"):
+                    log_message(
+                        st.session_state.airtable_record_id,
+                        st.session_state.message_counter,
+                        "assistant",
+                        closing_response
+                    )
+                
+                if st.session_state.get("player_record_id"):
+                    log_message_to_sss(
+                        st.session_state.player_record_id,
+                        st.session_state.session_id,
+                        st.session_state.message_counter,
+                        "assistant",
+                        closing_response
+                    )
+                
+                # Mark session as completed
+                if st.session_state.get("player_record_id"):
+                    session_marked = mark_session_completed(
+                        st.session_state.player_record_id,
+                        st.session_state.session_id
+                    )
+                    if session_marked:
+                        st.success("✅ Session marked as completed!")
+                
+                # Show session end options
+                show_session_end_message()
+                return
+        
+        # Normal message processing (not ending)
         with st.chat_message("assistant"):
             with st.spinner("Coach is thinking..."):
                 chunks = query_pinecone(index, prompt, top_k)
