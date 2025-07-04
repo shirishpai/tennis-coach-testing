@@ -226,6 +226,31 @@ def update_session_stats(session_id: str, total_messages: int) -> bool:
         print(f"Error updating session: {e}")
         return False
 
+def test_players_table_connection():
+    """Test if we can connect to Players table"""
+    try:
+        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Players"
+        headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
+        
+        response = requests.get(url, headers=headers)
+        st.write(f"**Players Table Connection Test:**")
+        st.write(f"Status: {response.status_code}")
+        if response.status_code != 200:
+            st.write(f"Error: {response.text}")
+        else:
+            st.write("✅ Connection successful!")
+            # Show table structure
+            data = response.json()
+            if data.get('records'):
+                st.write("**Existing records found:**", len(data['records']))
+                if data['records']:
+                    st.write("**Sample record fields:**")
+                    sample_fields = list(data['records'][0].get('fields', {}).keys())
+                    st.write(sample_fields)
+        
+    except Exception as e:
+        st.error(f"Connection test failed: {e}")
+
 def find_player_by_email(email: str):
     """Look up player in SSS Players table by email"""
     try:
@@ -234,9 +259,16 @@ def find_player_by_email(email: str):
         params = {"filterByFormula": f"{{email}} = '{email}'"}
         
         response = requests.get(url, headers=headers, params=params)
+        st.write(f"**Player Lookup Debug:**")
+        st.write(f"Email searched: {email}")
+        st.write(f"Status: {response.status_code}")
+        
         if response.status_code == 200:
             records = response.json().get('records', [])
+            st.write(f"Records found: {len(records)}")
             return records[0] if records else None
+        else:
+            st.write(f"Lookup error: {response.text}")
         return None
     except Exception as e:
         st.error(f"Error finding player: {e}")
@@ -266,7 +298,17 @@ def create_new_player(email: str, name: str, tennis_level: str, primary_goals: l
             }
         }
         
+        # Debug: Show what we're sending
+        st.write("**Debug - Data being sent:**")
+        st.json(data)
+        
         response = requests.post(url, headers=headers, json=data)
+        
+        # Debug: Show response
+        st.write("**Debug - Response:**")
+        st.write(f"Status Code: {response.status_code}")
+        st.write(f"Response Text: {response.text}")
+        
         if response.status_code == 200:
             return response.json()
         return None
@@ -395,6 +437,9 @@ def main():
                     st.error("Please enter your name.")
                 else:
                     with st.spinner("Setting up your coaching session..."):
+                        # Test connection first
+                        test_players_table_connection()
+                        
                         # Look up existing player
                         existing_player = find_player_by_email(player_email)
                         
@@ -413,6 +458,7 @@ def main():
                             
                         else:
                             # New player
+                            st.write("**Creating new player profile...**")
                             new_player = create_new_player(player_email, player_name, tennis_level, primary_goals, learning_style)
                             if new_player:
                                 st.session_state.player_record_id = new_player['id']
@@ -420,8 +466,9 @@ def main():
                                 st.session_state.previous_sessions = 0
                                 welcome_type = "new"
                                 session_info = "Welcome to your first session!"
+                                st.success("✅ New player profile created successfully!")
                             else:
-                                st.error("Error creating player profile. Please try again.")
+                                st.error("❌ Error creating player profile. Please check the debug info above.")
                                 return
                         
                         # Store player info in session state
