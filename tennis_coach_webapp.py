@@ -364,6 +364,43 @@ def show_session_end_message():
             if key not in ['player_email', 'player_record_id']:  # Keep login info
                 del st.session_state[key]
         st.rerun()
+
+def log_message_to_sss(player_record_id: str, session_id: str, message_order: int, role: str, content: str, chunks=None) -> bool:
+    """Log message to SSS Active_Sessions table"""
+    try:
+        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
+        headers = {
+            "Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}",
+            "Content-Type": "application/json"
+        }
+        
+        # Calculate token count (rough estimate)
+        token_count = len(content.split()) * 1.3
+        
+        # Map role values to match dropdown options
+        role_value = "coach" if role == "assistant" else "player"
+        
+        # Convert session_id to number
+        session_id_number = int(''.join(filter(str.isdigit, session_id))) if session_id else 1
+        
+        data = {
+            "fields": {
+                "player_id": [player_record_id],
+                "session_id": session_id_number,
+                "message_order": message_order,
+                "role": role_value,
+                "message_content": content[:100000],
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                "token_count": int(token_count),
+                "session_status": "active"
+            }
+        }
+        
+        response = requests.post(url, headers=headers, json=data)
+        return response.status_code == 200
+        
+    except Exception as e:
+        return False
     """Log message to SSS Active_Sessions table"""
     try:
         url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
