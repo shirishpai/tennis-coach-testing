@@ -149,19 +149,14 @@ def create_session_record(session_id: str, tester_name: str) -> str:
                 "device_info": device_info
             }
         }
-        print(f"Creating session: {session_id} for {tester_name}")
         response = requests.post(url, headers=headers, json=data)
-        print(f"Session creation response: {response.status_code} - {response.text}")
         if response.status_code == 200:
             record_data = response.json()
             record_id = record_data['id']
-            print(f"Session record ID: {record_id}")
             return record_id
         else:
             return None
     except Exception as e:
-        print(f"Error creating session: {e}")
-        st.error(f"Error creating session: {e}")
         return None
 
 def log_message(session_record_id: str, message_order: int, role: str, content: str, chunks=None) -> bool:
@@ -189,13 +184,9 @@ def log_message(session_record_id: str, message_order: int, role: str, content: 
                 "resource_details": resource_details
             }
         }
-        print(f"Logging message {message_order}: {role} - {content[:50]}...")
         response = requests.post(url, headers=headers, json=data)
-        print(f"Message log response: {response.status_code} - {response.text[:200]}...")
         return response.status_code == 200
     except Exception as e:
-        print(f"Error logging message: {e}")
-        st.error(f"Error logging message: {e}")
         return False
 
 def update_session_stats(session_id: str, total_messages: int) -> bool:
@@ -223,33 +214,7 @@ def update_session_stats(session_id: str, total_messages: int) -> bool:
                 return update_response.status_code == 200
         return False
     except Exception as e:
-        print(f"Error updating session: {e}")
         return False
-
-def test_players_table_connection():
-    """Test if we can connect to Players table"""
-    try:
-        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Players"
-        headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
-        
-        response = requests.get(url, headers=headers)
-        st.write(f"**Players Table Connection Test:**")
-        st.write(f"Status: {response.status_code}")
-        if response.status_code != 200:
-            st.write(f"Error: {response.text}")
-        else:
-            st.write("✅ Connection successful!")
-            # Show table structure
-            data = response.json()
-            if data.get('records'):
-                st.write("**Existing records found:**", len(data['records']))
-                if data['records']:
-                    st.write("**Sample record fields:**")
-                    sample_fields = list(data['records'][0].get('fields', {}).keys())
-                    st.write(sample_fields)
-        
-    except Exception as e:
-        st.error(f"Connection test failed: {e}")
 
 def find_player_by_email(email: str):
     """Look up player in SSS Players table by email"""
@@ -259,23 +224,15 @@ def find_player_by_email(email: str):
         params = {"filterByFormula": f"{{email}} = '{email}'"}
         
         response = requests.get(url, headers=headers, params=params)
-        st.write(f"**Player Lookup Debug:**")
-        st.write(f"Email searched: {email}")
-        st.write(f"Status: {response.status_code}")
-        
         if response.status_code == 200:
             records = response.json().get('records', [])
-            st.write(f"Records found: {len(records)}")
             return records[0] if records else None
-        else:
-            st.write(f"Lookup error: {response.text}")
         return None
     except Exception as e:
-        st.error(f"Error finding player: {e}")
         return None
 
-def create_new_player(email: str, name: str, tennis_level: str, primary_goals: list, learning_style: str):
-    """Create new player record in SSS Players table"""
+def create_new_player(email: str):
+    """Create new player record with just email (coach will gather other info)"""
     try:
         url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Players"
         headers = {
@@ -283,45 +240,30 @@ def create_new_player(email: str, name: str, tennis_level: str, primary_goals: l
             "Content-Type": "application/json"
         }
         
-        # Only include fields that aren't computed/formula fields
+        # Create minimal player record - coach will gather details during conversation
         data = {
             "fields": {
                 "email": email,
-                "name": name,
-                "tennis_level": tennis_level,
-                "primary_goals": primary_goals,
-                "learning_style": learning_style,
+                "name": "",  # Coach will ask
+                "tennis_level": "Unknown",  # Coach will assess
+                "primary_goals": [],  # Coach will discover
+                "learning_style": "Unknown",  # Coach will determine
                 "personality_notes": "",
                 "total_sessions": 1,
                 "first_session_date": time.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
                 "player_status": "Active"
-                # Removed last_session_date - it's a computed field
             }
         }
         
-        # Debug: Show what we're sending
-        st.write("**Debug - Data being sent (fixed):**")
-        st.json(data)
-        
         response = requests.post(url, headers=headers, json=data)
-        
-        # Debug: Show response
-        st.write("**Debug - Response:**")
-        st.write(f"Status Code: {response.status_code}")
-        st.write(f"Response Text: {response.text}")
-        
         if response.status_code == 200:
-            st.success("✅ Player created successfully!")
             return response.json()
-        else:
-            st.error(f"❌ Still getting error: {response.text}")
         return None
     except Exception as e:
-        st.error(f"Error creating player: {e}")
         return None
 
 def update_player_session_count(player_record_id: str):
-    """Update player's total sessions (last_session_date is computed)"""
+    """Update player's total sessions"""
     try:
         url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Players/{player_record_id}"
         headers = {
@@ -329,17 +271,14 @@ def update_player_session_count(player_record_id: str):
             "Content-Type": "application/json"
         }
         
-        # First get current session count
         response = requests.get(url, headers=headers)
         if response.status_code == 200:
             current_data = response.json()
             current_sessions = current_data.get('fields', {}).get('total_sessions', 0)
             
-            # Update only total_sessions (last_session_date is computed)
             update_data = {
                 "fields": {
                     "total_sessions": current_sessions + 1
-                    # Removed last_session_date update - it's computed
                 }
             }
             
@@ -347,7 +286,6 @@ def update_player_session_count(player_record_id: str):
             return update_response.status_code == 200
         return False
     except Exception as e:
-        st.error(f"Error updating player: {e}")
         return False
 
 def log_message_to_sss(player_record_id: str, session_id: str, message_order: int, role: str, content: str, chunks=None) -> bool:
@@ -360,72 +298,32 @@ def log_message_to_sss(player_record_id: str, session_id: str, message_order: in
         }
         
         # Calculate token count (rough estimate)
-        token_count = len(content.split()) * 1.3  # Rough token estimation
+        token_count = len(content.split()) * 1.3
         
-        # Map role values to match your exact dropdown options (lowercase)
+        # Map role values to match dropdown options
         role_value = "coach" if role == "assistant" else "player"
         
-        # Convert session_id to number (remove letters, keep only digits)
+        # Convert session_id to number
         session_id_number = int(''.join(filter(str.isdigit, session_id))) if session_id else 1
         
-        # Match your exact field structure
         data = {
             "fields": {
-                "player_id": [player_record_id],  # Link to Players table
-                "session_id": session_id_number,  # Number field
-                "message_order": message_order,   # Number field
-                "role": role_value,               # Single select: "player" or "coach"
-                "message_content": content[:100000],  # Long text
-                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.000Z"),  # Date
-                "token_count": int(token_count),  # Number
-                "session_status": "active"       # Single select: "active"
+                "player_id": [player_record_id],
+                "session_id": session_id_number,
+                "message_order": message_order,
+                "role": role_value,
+                "message_content": content[:100000],
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                "token_count": int(token_count),
+                "session_status": "active"
             }
         }
         
-        # Debug: Show what we're sending to SSS
-        st.write(f"**SSS Message Log Debug (Correct Structure):**")
-        st.write(f"Player ID: {player_record_id}")
-        st.write(f"Session ID: {session_id} → {session_id_number} (number)")
-        st.write(f"Message #{message_order}: {role} → {role_value}")
-        st.write(f"Content length: {len(content)} chars")
-        st.write(f"Estimated tokens: {int(token_count)}")
-        
-        st.write("**Data being sent:**")
-        st.json(data)
-        
         response = requests.post(url, headers=headers, json=data)
-        
-        st.write(f"**SSS Log Response:**")
-        st.write(f"Status: {response.status_code}")
-        if response.status_code != 200:
-            st.write(f"Error: {response.text}")
-            return False
-        else:
-            st.write("✅ Message logged to SSS successfully!")
-            return True
+        return response.status_code == 200
         
     except Exception as e:
-        st.error(f"Error logging to SSS: {e}")
         return False
-
-def test_active_sessions_connection():
-    """Test if we can connect to Active_Sessions table"""
-    try:
-        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
-        headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
-        
-        response = requests.get(url, headers=headers)
-        st.write(f"**Active_Sessions Table Test:**")
-        st.write(f"Status: {response.status_code}")
-        if response.status_code != 200:
-            st.write(f"Error: {response.text}")
-        else:
-            st.write("✅ Active_Sessions table accessible!")
-            data = response.json()
-            st.write(f"Current active messages: {len(data.get('records', []))}")
-        
-    except Exception as e:
-        st.error(f"Active_Sessions test failed: {e}")
 
 def main():
     st.set_page_config(
@@ -468,60 +366,25 @@ def main():
                         for j, chunk in enumerate(entry['chunks']):
                             st.markdown(f"  - Resource {j+1}: {chunk['topics']} (score: {chunk['score']:.3f})")
     
-    # Updated player setup with email collection and SSS integration
+    # Simplified player setup - just email
     if not st.session_state.get("player_setup_complete"):
         with st.form("player_setup"):
             st.markdown("### 🎾 Welcome to Tennis Coach AI")
-            st.markdown("**Quick setup to personalize your coaching experience:**")
+            st.markdown("**Quick setup:**")
             
-            # Email collection (required)
+            # Only email collection
             player_email = st.text_input(
-                "Email address *", 
+                "Email address", 
                 placeholder="your.email@example.com",
                 help="Required for session continuity and progress tracking"
-            )
-            
-            # Name collection  
-            player_name = st.text_input(
-                "Your name", 
-                placeholder="e.g., Sarah, Mike, Alex...",
-                help="How should your coach address you?"
-            )
-            
-            # Tennis level
-            tennis_level = st.selectbox(
-                "Tennis level",
-                ["Beginner", "Intermediate", "Advanced"],
-                help="Helps customize coaching advice"
-            )
-            
-            # Primary goals
-            primary_goals = st.multiselect(
-                "What do you want to work on?",
-                ["Technique", "Fitness", "Competition", "Fun", "Mental Game"],
-                default=["Technique"],
-                help="Select all that apply"
-            )
-            
-            # Learning style
-            learning_style = st.selectbox(
-                "Learning style",
-                ["Visual", "Kinesthetic", "Analytical", "Social"],
-                help="How do you learn best?"
             )
             
             if st.form_submit_button("Start Coaching Session", type="primary"):
                 # Validation
                 if not player_email or "@" not in player_email:
                     st.error("Please enter a valid email address.")
-                elif not player_name:
-                    st.error("Please enter your name.")
                 else:
                     with st.spinner("Setting up your coaching session..."):
-                        # Test connections first
-                        test_players_table_connection()
-                        test_active_sessions_connection()
-                        
                         # Look up existing player
                         existing_player = find_player_by_email(player_email)
                         
@@ -531,6 +394,7 @@ def main():
                             st.session_state.player_record_id = existing_player['id']
                             st.session_state.is_returning_player = True
                             st.session_state.previous_sessions = player_data.get('total_sessions', 0)
+                            player_name = player_data.get('name', 'there')
                             
                             # Update session count
                             update_player_session_count(existing_player['id'])
@@ -540,25 +404,20 @@ def main():
                             
                         else:
                             # New player
-                            st.write("**Creating new player profile...**")
-                            new_player = create_new_player(player_email, player_name, tennis_level, primary_goals, learning_style)
+                            new_player = create_new_player(player_email)
                             if new_player:
                                 st.session_state.player_record_id = new_player['id']
                                 st.session_state.is_returning_player = False
                                 st.session_state.previous_sessions = 0
+                                player_name = "there"
                                 welcome_type = "new"
                                 session_info = "Welcome to your first session!"
-                                st.success("✅ New player profile created successfully!")
                             else:
-                                st.error("❌ Error creating player profile. Please check the debug info above.")
+                                st.error("Error creating player profile. Please try again.")
                                 return
                         
                         # Store player info in session state
                         st.session_state.player_email = player_email
-                        st.session_state.player_name = player_name
-                        st.session_state.tennis_level = tennis_level
-                        st.session_state.primary_goals = primary_goals
-                        st.session_state.learning_style = learning_style
                         st.session_state.player_setup_complete = True
                         
                         # Initialize session variables
@@ -569,22 +428,20 @@ def main():
                         st.session_state.conversation_log = []
                         st.session_state.message_counter = 0
                         
-                        # Create session record (using old system for now)
-                        airtable_record_id = create_session_record(session_id, player_name)
+                        # Create session record (using old system for backup)
+                        airtable_record_id = create_session_record(session_id, player_email)
                         if airtable_record_id:
                             st.session_state.airtable_record_id = airtable_record_id
                         
-                        # Personalized welcome message
+                        # Updated welcome message
                         if welcome_type == "returning":
-                            welcome_msg = f"""👋 Welcome back, {player_name}! Great to see you again.
+                            welcome_msg = f"""👋 Hi! This is your Coach TA. Great to see you back, {player_name}!
                             
-{session_info} - I remember you're a {tennis_level.lower()} player working on {', '.join(primary_goals).lower()}. 
-
-What would you like to focus on in today's session?"""
+{session_info} - What shall we work on today?"""
                         else:
-                            welcome_msg = f"""👋 Hi {player_name}! I'm your tennis coach, and {session_info}
+                            welcome_msg = f"""👋 Hi! This is your Coach TA. {session_info}
                             
-I see you're a {tennis_level.lower()} player focusing on {', '.join(primary_goals).lower()}. What would you like to work on today?
+I'm here to help you improve your tennis game. What shall we work on today?
 
 I can help with technique, strategy, mental game, or any specific issues you're having on court."""
                         
@@ -600,30 +457,14 @@ I can help with technique, strategy, mental game, or any specific issues you're 
                             log_message_to_sss(
                                 st.session_state.player_record_id,
                                 session_id,
-                                0,  # Welcome message is #0
+                                0,
                                 "assistant",
                                 welcome_msg
                             )
                         
-                        success_msg = f"Welcome {player_name}! " + ("Returning player recognized." if welcome_type == "returning" else "New player profile created.")
-                        st.success(success_msg)
+                        st.success(f"Welcome! Ready to start your coaching session.")
                         st.rerun()
         return
-    
-    # Debug info (temporary - remove later)
-    if st.session_state.get("player_setup_complete"):
-        with st.expander("🔍 Debug: Player Info & SSS Integration"):
-            st.write("Email:", st.session_state.get("player_email"))
-            st.write("Name:", st.session_state.get("player_name"))
-            st.write("Level:", st.session_state.get("tennis_level"))
-            st.write("Goals:", st.session_state.get("primary_goals"))
-            st.write("Style:", st.session_state.get("learning_style"))
-            st.write("---")
-            st.write("**SSS Integration:**")
-            st.write("Player Record ID:", st.session_state.get("player_record_id"))
-            st.write("Returning Player:", st.session_state.get("is_returning_player"))
-            st.write("Previous Sessions:", st.session_state.get("previous_sessions"))
-            st.write("Current Session ID:", st.session_state.get("session_id"))
     
     # Display conversation messages
     for message in st.session_state.messages:
@@ -641,7 +482,7 @@ I can help with technique, strategy, mental game, or any specific issues you're 
             "timestamp": time.time()
         })
         
-        # Log user message to both systems (old and SSS)
+        # Log user message to both systems
         if st.session_state.get("airtable_record_id"):
             log_message(
                 st.session_state.airtable_record_id,
