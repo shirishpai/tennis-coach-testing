@@ -262,9 +262,9 @@ headers = {
     
     response = requests.post(url, headers=headers, json=data)
     
-    # Remove debug lines after player creation is working
-    # st.error(f"Airtable Response Code: {response.status_code}")
-    # st.error(f"Airtable Response: {response.text}")
+    # TEMPORARY DEBUG - THESE LINES WILL SHOW THE EXACT ERROR:
+    st.error(f"Airtable Response Code: {response.status_code}")
+    st.error(f"Airtable Response: {response.text}")
     
     if response.status_code == 200:
         return response.json()
