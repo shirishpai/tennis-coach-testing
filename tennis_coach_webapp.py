@@ -605,7 +605,21 @@ def main():
                         st.session_state.message_counter = 0
                         
                         if welcome_type == "returning":
-                            welcome_msg = f"👋 Hi! This is your Coach TA. Great to see you back, {player_name}!\n\n{session_info} - What shall we work on today?"
+                            # Load recent coaching history
+                            recent_summaries = get_player_recent_summaries(existing_player['id'], 2)
+                            
+                            if recent_summaries:
+                                last_session = recent_summaries[0]
+                                context_text = f"\n\nLast session we worked on: {last_session.get('technical_focus', 'technique practice')}"
+                                if last_session.get('homework_assigned'):
+                                    context_text += f"\n\nI assigned you: {last_session.get('homework_assigned', '')}"
+                                if last_session.get('next_session_focus'):
+                                    context_text += f"\n\nToday I'd like to focus on: {last_session.get('next_session_focus', '')}"
+                                context_text += "\n\nHow did that practice go? Ready to continue?"
+                            else:
+                                context_text = "\n\nWhat shall we work on today?"
+                            
+                            welcome_msg = f"👋 Hi! This is your Coach TA. Great to see you back, {player_name}!\n\n{session_info}{context_text}"
                         else:
                             welcome_msg = f"👋 Hi! This is your Coach TA. {session_info}\n\nI'm here to help you improve your tennis game. What shall we work on today?\n\nI can help with technique, strategy, mental game, or any specific issues you're having on court."
                         
