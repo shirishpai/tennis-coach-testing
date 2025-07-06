@@ -299,8 +299,8 @@ def get_session_messages(player_record_id: str, session_id: str) -> list:
         return []
 def generate_session_summary(messages: list, claude_client) -> dict:
     try:
-        st.error(f"DEBUG: Starting summary generation with {len(messages)} messages")
-        st.error(f"DEBUG: Sample message: {messages[0] if messages else 'None'}")
+        # st.error(f"DEBUG: Starting summary generation with {len(messages)} messages")
+        # st.error(f"DEBUG: Sample message: {messages[0] if messages else 'None'}")
         conversation_text = ""
         for msg in messages:
             role_label = "Player" if msg['role'] == 'player' else "Coach"
@@ -333,14 +333,14 @@ NEXT_SESSION_FOCUS: [your analysis]
 KEY_BREAKTHROUGHS: [your analysis]
 CONDENSED_SUMMARY: [your analysis]"""
 
-        st.error("DEBUG: About to call Claude API for summary")
+        # st.error("DEBUG: About to call Claude API for summary")
         response = claude_client.messages.create(
             model="claude-3-5-sonnet-20241022",
             max_tokens=800,
             messages=[{"role": "user", "content": summary_prompt}]
         )
-        st.error("DEBUG: Claude API call successful")
-        st.error(f"DEBUG: Claude response length: {len(response.content[0].text)}")
+        # st.error("DEBUG: Claude API call successful")
+        # st.error(f"DEBUG: Claude response length: {len(response.content[0].text)}")
         summary_text = response.content[0].text
         
         summary_data = {}
