@@ -501,12 +501,16 @@ def log_message_to_sss(player_record_id: str, session_id: str, message_order: in
     except Exception as e:
         return False
 def get_player_recent_summaries(player_record_id: str, limit: int = 3) -> list:
+    """
+    Get recent summaries for a specific player using proper Airtable linked record filtering
+    """
     try:
         url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Session_Summaries"
         headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
         
+        # FIXED: Use RECORD_ID() function for linked record filtering
         params = {
-            "filterByFormula": f"{{player_id}} = '{player_record_id}'",
+            "filterByFormula": f"RECORD_ID({{player_id}}) = '{player_record_id}'",
             "sort[0][field]": "session_number",
             "sort[0][direction]": "desc",
             "maxRecords": limit
@@ -520,15 +524,159 @@ def get_player_recent_summaries(player_record_id: str, limit: int = 3) -> list:
                 fields = record.get('fields', {})
                 summaries.append({
                     'session_number': fields.get('session_number', 0),
+                    'session_date': fields.get('session_date', ''),
                     'technical_focus': fields.get('technical_focus', ''),
+                    'mental_game_notes': fields.get('mental_game_notes', ''),
                     'homework_assigned': fields.get('homework_assigned', ''),
                     'next_session_focus': fields.get('next_session_focus', ''),
-                    'key_breakthroughs': fields.get('key_breakthroughs', '')
+                    'key_breakthroughs': fields.get('key_breakthroughs', ''),
+                    'condensed_summary': fields.get('condensed_summary', '')
                 })
             return summaries
-        return []
+        else:
+            print(f"Airtable API error: {response.status_code} - {response.text}")
+            return []
     except Exception as e:
+        print(f"Error getting recent summaries: {str(e)}")
         return []
+
+# ENHANCED: Welcome message generation with better context
+def generate_personalized_welcome_message(player_name: str, session_number: int, recent_summaries: list, is_returning: bool) -> str:
+    """
+    Generate a personalized welcome message based on coaching history
+    """
+    if not is_returning or not recent_summaries:
+        return f"""👋 Hi! This is your Coach TA. Welcome to your first session!
+
+I'm here to help you improve your tennis game. What shall we work on today?
+
+I can help with:
+• Technique (forehand, backhand, serve, volleys)
+• Strategy and tactics
+• Mental game and confidence
+• Match preparation
+• Any specific issues you're having on court
+
+What's your main focus today? 🎾"""
+
+    # Returning player with history
+    last_session = recent_summaries[0]
+    
+    welcome_parts = [
+        f"👋 Hi! This is your Coach TA. Great to see you back, {player_name}!",
+        f"\n**This is session #{session_number}**"
+    ]
+    
+    # Add context from last session
+    if last_session.get('technical_focus'):
+        welcome_parts.append(f"\n🎯 **Last session:** We worked on {last_session['technical_focus']}")
+    
+    if last_session.get('homework_assigned'):
+        welcome_parts.append(f"\n📝 **Your homework:** {last_session['homework_assigned']}")
+        welcome_parts.append("\n*How did that practice go?*")
+    
+    if last_session.get('next_session_focus'):
+        welcome_parts.append(f"\n🎾 **Today's focus:** {last_session['next_session_focus']}")
+    
+    if last_session.get('key_breakthroughs'):
+        welcome_parts.append(f"\n⚡ **Last breakthrough:** {last_session['key_breakthroughs']}")
+    
+    welcome_parts.append("\n\nReady to continue your tennis journey? What shall we work on today?")
+    
+    return "".join(welcome_parts)
+
+# ENHANCED: Build conversational prompt with coaching history
+def build_conversational_prompt_with_history(user_question: str, context_chunks: list, conversation_history: list, coaching_history: list = None) -> str:
+    """
+    Build Claude prompt including coaching history for better continuity
+    """
+    
+    # Base coaching context
+    coaching_context = """You are an expert tennis coach with deep knowledge of technique, strategy, and mental game. 
+Your goal is to provide personalized, actionable advice that helps players improve systematically."""
+    
+    # Add coaching history if available
+    if coaching_history and len(coaching_history) > 0:
+        history_context = "\n\nPLAYER'S COACHING HISTORY:\n"
+        for i, session in enumerate(coaching_history[:2], 1):  # Last 2 sessions
+            history_context += f"\nSession {session.get('session_number', i)}:\n"
+            if session.get('technical_focus'):
+                history_context += f"- Technical focus: {session['technical_focus']}\n"
+            if session.get('homework_assigned'):
+                history_context += f"- Homework assigned: {session['homework_assigned']}\n"
+            if session.get('key_breakthroughs'):
+                history_context += f"- Breakthrough: {session['key_breakthroughs']}\n"
+        
+        coaching_context += history_context
+        coaching_context += "\nUse this history to provide continuity and reference previous work when relevant."
+    
+    # Build the full prompt
+    context_text = "\n\n".join([chunk.get('content', '') for chunk in context_chunks if chunk.get('content')])
+    
+    recent_conversation = ""
+    if conversation_history:
+        recent_messages = conversation_history[-6:]  # Last 3 exchanges
+        for msg in recent_messages:
+            role = "Player" if msg['role'] == 'user' else "Coach"
+            recent_conversation += f"{role}: {msg['content']}\n"
+    
+    full_prompt = f"""{coaching_context}
+
+RELEVANT TENNIS KNOWLEDGE:
+{context_text}
+
+RECENT CONVERSATION:
+{recent_conversation}
+
+CURRENT QUESTION: {user_question}
+
+Provide helpful, specific tennis coaching advice. Reference previous sessions naturally when relevant. Keep responses conversational and actionable."""
+
+    return full_prompt
+
+# UPDATED: Main function section for player setup (replace the existing player setup section)
+def setup_player_session_with_continuity(player_email: str):
+    """
+    Enhanced player setup with proper continuity system
+    """
+    existing_player = find_player_by_email(player_email)
+    
+    if existing_player:
+        # Returning player
+        player_data = existing_player['fields']
+        st.session_state.player_record_id = existing_player['id']
+        st.session_state.is_returning_player = True
+        player_name = player_data.get('name', 'there')
+        session_number = player_data.get('total_sessions', 0) + 1
+        
+        # Load recent coaching history
+        with st.spinner("Loading your coaching history..."):
+            recent_summaries = get_player_recent_summaries(existing_player['id'], 3)
+            st.session_state.coaching_history = recent_summaries
+        
+        welcome_msg = generate_personalized_welcome_message(
+            player_name, 
+            session_number, 
+            recent_summaries, 
+            True
+        )
+        
+        update_player_session_count(existing_player['id'])
+        
+    else:
+        # New player
+        new_player = create_new_player(player_email)
+        if new_player:
+            st.session_state.player_record_id = new_player['id']
+            st.session_state.is_returning_player = False
+            st.session_state.coaching_history = []
+            welcome_msg = generate_personalized_welcome_message("there", 1, [], False)
+        else:
+            st.error("Error creating player profile. Please try again.")
+            return None
+    
+    return welcome_msg
+
 def main():
     st.set_page_config(
         page_title="Tennis Coach AI",
