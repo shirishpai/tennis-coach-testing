@@ -375,6 +375,8 @@ CONDENSED_SUMMARY: [your analysis]"""
 
 def save_session_summary(player_record_id: str, session_number: int, summary_data: dict, original_message_count: int) -> bool:
     try:
+        st.error(f"DEBUG: Attempting to save summary - Player: {player_record_id}, Session: {session_number}")
+        st.error(f"DEBUG: Summary data keys: {list(summary_data.keys())}")
         url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Session_Summaries"
         headers = {
             "Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}",
@@ -402,6 +404,7 @@ def save_session_summary(player_record_id: str, session_number: int, summary_dat
         }
         
         response = requests.post(url, headers=headers, json=data)
+        st.error(f"DEBUG: Airtable response code: {response.status_code}")
         return response.status_code == 200
         
     except Exception as e:
