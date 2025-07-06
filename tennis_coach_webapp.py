@@ -554,6 +554,7 @@ def main():
                             player_name = player_data.get('name', 'there')
                             welcome_type = "returning"
                             session_info = f"This is session #{player_data.get('total_sessions', 0) + 1}"
+                            update_player_session_count(existing_player['id'])
                         else:
                             new_player = create_new_player(player_email)
                             if new_player:
