@@ -405,6 +405,7 @@ def save_session_summary(player_record_id: str, session_number: int, summary_dat
         
         response = requests.post(url, headers=headers, json=data)
         st.error(f"DEBUG: Airtable response code: {response.status_code}")
+        st.error(f"DEBUG: Airtable error details: {response.text}")
         return response.status_code == 200
         
     except Exception as e:
