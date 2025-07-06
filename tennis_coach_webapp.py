@@ -641,7 +641,7 @@ Provide helpful, specific tennis coaching advice. Reference previous sessions na
 # UPDATED: Main function section for player setup (replace the existing player setup section)
 def setup_player_session_with_continuity(player_email: str):
     """
-    Enhanced player setup with proper continuity system
+    Enhanced player setup with proper continuity system - CORRECTED VERSION
     """
     existing_player = find_player_by_email(player_email)
     
@@ -655,32 +655,38 @@ def setup_player_session_with_continuity(player_email: str):
         
         # Load recent coaching history
         with st.spinner("Loading your coaching history..."):
-            recent_summaries = get_player_recent_summaries(existing_player['id'], 3)
+            recent_summaries = get_player_recent_summaries(existing_player['id'], 2)
             st.session_state.coaching_history = recent_summaries
         
-        welcome_msg = generate_personalized_welcome_message(
-            player_name, 
-            session_number, 
-            recent_summaries, 
-            True
-        )
+        # Generate welcome message for returning player
+        if recent_summaries:
+            last_session = recent_summaries[0]
+            context_text = f"\n\nLast session we worked on: {last_session.get('technical_focus', 'technique practice')}"
+            if last_session.get('homework_assigned'):
+                context_text += f"\n\nI assigned you: {last_session.get('homework_assigned', '')}"
+            if last_session.get('next_session_focus'):
+                context_text += f"\n\nToday I'd like to focus on: {last_session.get('next_session_focus', '')}"
+            context_text += "\n\nHow did that practice go? Ready to continue?"
+        else:
+            context_text = "\n\nWhat shall we work on today?"
+        
+        welcome_msg = f"👋 Hi! This is your Coach TA. Great to see you back, {player_name}!\n\nThis is session #{session_number}{context_text}"
         
         update_player_session_count(existing_player['id'])
         
+    else:
+        # New player
+        new_player = create_new_player(player_email, st.session_state.get('player_name_input', ''))
+        if new_player:
+            st.session_state.player_record_id = new_player['id']
+            st.session_state.is_returning_player = False
+            st.session_state.coaching_history = []
+            welcome_msg = f"👋 Hi! This is your Coach TA. Welcome to your first session!\n\nI'm here to help you improve your tennis game. What shall we work on today?\n\nI can help with technique, strategy, mental game, or any specific issues you're having on court."
         else:
-            # New player
-            new_player = create_new_player(player_email, st.session_state.get('player_name_input', ''))
-            if new_player:
-                st.session_state.player_record_id = new_player['id']
-                st.session_state.is_returning_player = False
-                st.session_state.coaching_history = []
-                welcome_msg = generate_personalized_welcome_message("there", 1, [], False)
-            else:
-                st.error("Error creating player profile. Please try again.")
-                return None
-                
-        return welcome_msg
-
+            st.error("Error creating player profile. Please try again.")
+            return None
+    
+    return welcome_msg
 def main():
     st.set_page_config(
         page_title="Tennis Coach AI",
