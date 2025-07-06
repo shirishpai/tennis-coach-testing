@@ -591,10 +591,12 @@ What's your main focus today? 🎾"""
 
 # ENHANCED: Build conversational prompt with coaching history
 def build_conversational_prompt_with_history(user_question: str, context_chunks: list, conversation_history: list, coaching_history: list = None) -> str:
-    print(f"DEBUG: Coaching history received: {len(coaching_history) if coaching_history else 0} sessions")
     """
     Build Claude prompt including coaching history for better continuity
     """
+    
+    # DEBUG LINE - shows in Streamlit as red error message
+    st.error(f"DEBUG: Coaching history received: {len(coaching_history) if coaching_history else 0} sessions")
     
     # Base coaching context
     coaching_context = """You are an expert tennis coach with deep knowledge of technique, strategy, and mental game. 
@@ -615,7 +617,7 @@ Your goal is to provide personalized, actionable advice that helps players impro
         coaching_context += history_context
         coaching_context += "\nUse this history to provide continuity and reference previous work when relevant."
     
-    # Build the full prompt
+    # Build the full prompt - FIXED: using 'text' instead of 'content'
     context_text = "\n\n".join([chunk.get('text', '') for chunk in context_chunks if chunk.get('text')])
     
     recent_conversation = ""
@@ -639,7 +641,6 @@ Provide helpful, specific tennis coaching advice. Reference previous sessions na
 
     return full_prompt
 
-# UPDATED: Main function section for player setup (replace the existing player setup section)
 def setup_player_session_with_continuity(player_email: str):
     """
     Enhanced player setup with proper continuity system - CORRECTED VERSION
