@@ -404,8 +404,12 @@ def save_session_summary(player_record_id: str, session_number: int, summary_dat
 
 def process_completed_session(player_record_id: str, session_id: str, claude_client) -> bool:
     try:
+        st.error(f"DEBUG: Getting messages for session {session_id}")
         messages = get_session_messages(player_record_id, session_id)
+        st.error(f"DEBUG: Retrieved {len(messages)} messages")
+        
         if not messages:
+            st.error("DEBUG: No messages found - returning False")
             return False
         
         summary_data = generate_session_summary(messages, claude_client)
