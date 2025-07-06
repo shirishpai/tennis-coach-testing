@@ -629,27 +629,20 @@ def main():
                     if session_marked:
                         st.success("✅ Session marked as completed!")
                         
-                        # Generate session summary
+                        
                         # Generate session summary
                         with st.spinner("🧠 Generating session summary..."):
                             st.error(f"DEBUG: About to process session - Player: {st.session_state.player_record_id}, Session: {st.session_state.session_id}")
-                            st.error("DEBUG: MAIN - About to call process_completed_session")
-                        summary_created = process_completed_session(
-                            st.session_state.player_record_id,
-                            st.session_state.session_id,
-                            claude_client
-                        )
-                            st.error(f"DEBUG: Summary result: {summary_created}")
                             summary_created = process_completed_session(
                                 st.session_state.player_record_id,
                                 st.session_state.session_id,
                                 claude_client
                             )
+                            st.error(f"DEBUG: Summary result: {summary_created}")
                             if summary_created:
                                 st.success("📝 Session summary generated and saved!")
                             else:
-                                st.warning("⚠️ Session completed but summary generation had issues.")
-                
+                                st.warning("⚠️ Session completed but summary generation had issues.")                
                 # Show session end message
                 st.success("🎾 **Session Complete!** Thanks for training with Coach TA today.")
                 if st.button("🔄 Start New Session", type="primary"):
