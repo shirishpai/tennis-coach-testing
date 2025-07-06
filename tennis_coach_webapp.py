@@ -844,7 +844,7 @@ def main():
                         
                         # Generate session summary
                         with st.spinner("🧠 Generating session summary..."):
-                            st.error(f"DEBUG: player_record_id value = '{st.session_state.player_record_id}'")
+                            # st.error(f"DEBUG: player_record_id value = '{st.session_state.player_record_id}'")
                             # st.error(f"DEBUG: About to process session - Player: {st.session_state.player_record_id}, Session: {st.session_state.session_id}")
                             summary_created = process_completed_session(
                                 st.session_state.player_record_id,
