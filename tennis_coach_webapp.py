@@ -236,7 +236,7 @@ def create_new_player(email: str):
         return None
 
 def update_player_session_count(player_record_id: str):
-    """Update player's total sessions"""
+    # Update player's total sessions
     try:
         url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Players/{player_record_id}"
         headers = {
