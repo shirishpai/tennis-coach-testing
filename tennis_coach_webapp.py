@@ -739,7 +739,7 @@ I can help with technique, strategy, mental game, or any specific issues you're 
        })
        
        # Log user message to both systems
-       if st.session_state.get("airtable_record_id"):
+        if st.session_state.get("airtable_record_id"):
            log_message(
                st.session_state.airtable_record_id,
                st.session_state.message_counter,
