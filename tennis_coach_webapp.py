@@ -308,12 +308,14 @@ NEXT_SESSION_FOCUS: [your analysis]
 KEY_BREAKTHROUGHS: [your analysis]
 CONDENSED_SUMMARY: [your analysis]"""
 
+        st.error("DEBUG: About to call Claude API for summary")
         response = claude_client.messages.create(
             model="claude-3-5-sonnet-20241022",
             max_tokens=800,
             messages=[{"role": "user", "content": summary_prompt}]
         )
-        
+        st.error("DEBUG: Claude API call successful")
+        st.error(f"DEBUG: Claude response length: {len(response.content[0].text)}")
         summary_text = response.content[0].text
         
         summary_data = {}
