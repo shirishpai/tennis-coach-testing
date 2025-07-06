@@ -207,6 +207,31 @@ def detect_session_end(message_content: str) -> bool:
     
     return False
 
+def update_player_session_count(player_record_id: str):
+    try:
+        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Players/{player_record_id}"
+        headers = {
+            "Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}",
+            "Content-Type": "application/json"
+        }
+        
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            current_data = response.json()
+            current_sessions = current_data.get('fields', {}).get('total_sessions', 0)
+            
+            update_data = {
+                "fields": {
+                    "total_sessions": current_sessions + 1
+                }
+            }
+            
+            update_response = requests.patch(url, headers=headers, json=update_data)
+            return update_response.status_code == 200
+        return False
+    except Exception as e:
+        return False
+
 def mark_session_completed(player_record_id: str, session_id: str) -> bool:
     try:
         url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
