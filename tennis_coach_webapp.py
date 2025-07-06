@@ -104,44 +104,7 @@ Content: {chunk['text']}
 Guidelines:
 - CRITICAL: Keep responses very short - maximum 3-4 sentences (phone screen length)
 - Focus on ONE specific tip or correction per response
-- Give advice for SOLO practice or general technique improvement
-- Ask one engaging follow-up question to continue the conversation
-- Use encouraging, supportive tone
-- Be direct and actionable
-- DO NOT suggest feeding balls, court positioning, or activities requiring a coach present
-- Focus on: technique tips, solo drills, mental approach, general strategy
-
-{history_text}
-
-Professional Coaching Resources:
-{context_text}
-
-Current Player Question: "{question}"
-
-Respond as their remote tennis coach with a SHORT, focused response:"""
-
-def query_claude(client, prompt: str) -> str:
-    import time
-    max_retries = 3
-    retry_delay = 2
-    
-    for attempt in range(max_retries):
-        try:
-            response = client.messages.create(
-                model="claude-3-5-sonnet-20241022",
-                max_tokens=300,
-                messages=[
-                    {"role": "user", "content": prompt}
-                ]
-            )
-            return response.content[0].text
-        except Exception as e:
-            if "529" in str(e) or "overloaded" in str(e).lower():
-                if attempt < max_retries - 1:
-                    time.sleep(retry_delay * (attempt + 1))
-                    continue
-            return f"Error generating coaching response: {e}"
-
+- Give advice for SOLO practice or general technique
 def create_session_record(session_id: str, tester_name: str) -> str:
     try:
         url = f"https://api.airtable.com/v0/{st.secrets['AIRTABLE_BASE_ID']}/Test_Sessions"
@@ -387,7 +350,6 @@ def get_session_messages(player_record_id: str, session_id: str) -> list:
         return []
     except Exception as e:
         return []
-
 def generate_session_summary(messages: list, claude_client) -> dict:
     """Use Claude to generate structured session summary"""
     try:
@@ -732,174 +694,175 @@ I can help with technique, strategy, mental game, or any specific issues you're 
             st.session_state.session_ending = True
         
         st.session_state.message_counter += 1
+        
         st.session_state.conversation_log.append({
-           "role": "user", 
-           "content": prompt,
-           "timestamp": time.time()
-       })
-       
-       # Log user message to both systems
-       if st.session_state.get("airtable_record_id"):
-           log_message(
-               st.session_state.airtable_record_id,
-               st.session_state.message_counter,
-               "user",
-               prompt
-           )
-       
-       # Log to SSS Active_Sessions
-       if st.session_state.get("player_record_id"):
-           log_message_to_sss(
-               st.session_state.player_record_id,
-               st.session_state.session_id,
-               st.session_state.message_counter,
-               "user",
-               prompt
-           )
-       
-       with st.chat_message("user"):
-           st.markdown(prompt)
-       
-       # If session is ending, provide closing response and mark as completed
-       if st.session_state.get("session_ending"):
-           with st.chat_message("assistant"):
-               closing_response = "Great session today! I've saved our progress and I'll remember what we worked on. Keep practicing those techniques, and I'll be here whenever you need coaching support. Take care! 🎾"
-               st.markdown(closing_response)
-               
-               # Log closing response
-               st.session_state.message_counter += 1
-               st.session_state.messages.append({
-                   "role": "assistant", 
-                   "content": closing_response
-               })
-               
-               # Log to both systems
-               if st.session_state.get("airtable_record_id"):
-                   log_message(
-                       st.session_state.airtable_record_id,
-                       st.session_state.message_counter,
-                       "assistant",
-                       closing_response
-                   )
-               
-               if st.session_state.get("player_record_id"):
-                   log_message_to_sss(
-                       st.session_state.player_record_id,
-                       st.session_state.session_id,
-                       st.session_state.message_counter,
-                       "assistant",
-                       closing_response
-                   )
-               
-               # Mark session as completed
-               if st.session_state.get("player_record_id"):
-                   session_marked = mark_session_completed(
-                       st.session_state.player_record_id,
-                       st.session_state.session_id
-                   )
-                   if session_marked:
-                       st.success("✅ Session marked as completed!")
-                       
-                       # Generate session summary
-                       with st.spinner("🧠 Generating session summary..."):
-                           summary_created = process_completed_session(
-                               st.session_state.player_record_id,
-                               st.session_state.session_id,
-                               claude_client
-                           )
-                           if summary_created:
-                               st.success("📝 Session summary generated and saved!")
-                           else:
-                               st.warning("⚠️ Session completed but summary generation had issues.")
-               
-               # Show session end options
-               show_session_end_message()
-               return
-       
-       # Normal message processing (not ending)
-       with st.chat_message("assistant"):
-           with st.spinner("Coach is thinking..."):
-               chunks = query_pinecone(index, prompt, top_k)
-               
-               if chunks:
-                   full_prompt = build_conversational_prompt(
-                       prompt, 
-                       chunks, 
-                       st.session_state.messages[:-1]
-                   )
-                   
-                   response = query_claude(claude_client, full_prompt)
-                   
-                   st.markdown(response)
-                   
-                   st.session_state.message_counter += 1
-                   
-                   st.session_state.messages.append({
-                       "role": "assistant", 
-                       "content": response
-                   })
-                   
-                   st.session_state.conversation_log.append({
-                       "role": "assistant", 
-                       "content": response,
-                       "chunks": chunks,
-                       "timestamp": time.time(),
-                       "prompt_used": full_prompt
-                   })
-                   
-                   # Log assistant response to both systems
-                   if st.session_state.get("airtable_record_id"):
-                       log_message(
-                           st.session_state.airtable_record_id,
-                           st.session_state.message_counter,
-                           "assistant",
-                           response,
-                           chunks
-                       )
-                   
-                   # Log to SSS Active_Sessions
-                   if st.session_state.get("player_record_id"):
-                       log_message_to_sss(
-                           st.session_state.player_record_id,
-                           st.session_state.session_id,
-                           st.session_state.message_counter,
-                           "assistant",
-                           response,
-                           chunks
-                       )
-                   
-                   update_session_stats(st.session_state.session_id, st.session_state.message_counter)
-                   
-               else:
-                   error_msg = "Could you rephrase that? I want to give you the best coaching advice possible."
-                   st.markdown(error_msg)
-                   st.session_state.message_counter += 1
-                   
-                   st.session_state.messages.append({"role": "assistant", "content": error_msg})
-                   st.session_state.conversation_log.append({
-                       "role": "assistant", 
-                       "content": error_msg,
-                       "timestamp": time.time()
-                   })
-                   
-                   # Log error message to both systems
-                   if st.session_state.get("airtable_record_id"):
-                       log_message(
-                           st.session_state.airtable_record_id,
-                           st.session_state.message_counter,
-                           "assistant",
-                           error_msg
-                       )
-                   
-                   # Log to SSS Active_Sessions
-                   if st.session_state.get("player_record_id"):
-                       log_message_to_sss(
-                           st.session_state.player_record_id,
-                           st.session_state.session_id,
-                           st.session_state.message_counter,
-                           "assistant",
-                           error_msg
-                       )
+            "role": "user", 
+            "content": prompt,
+            "timestamp": time.time()
+        })
+        
+        # Log user message to both systems
+        if st.session_state.get("airtable_record_id"):
+            log_message(
+                st.session_state.airtable_record_id,
+                st.session_state.message_counter,
+                "user",
+                prompt
+            )
+        
+        # Log to SSS Active_Sessions
+        if st.session_state.get("player_record_id"):
+            log_message_to_sss(
+                st.session_state.player_record_id,
+                st.session_state.session_id,
+                st.session_state.message_counter,
+                "user",
+                prompt
+            )
+        
+        with st.chat_message("user"):
+            st.markdown(prompt)
+        
+        # If session is ending, provide closing response and mark as completed
+        if st.session_state.get("session_ending"):
+            with st.chat_message("assistant"):
+                closing_response = "Great session today! I've saved our progress and I'll remember what we worked on. Keep practicing those techniques, and I'll be here whenever you need coaching support. Take care! 🎾"
+                st.markdown(closing_response)
+                
+                # Log closing response
+                st.session_state.message_counter += 1
+                st.session_state.messages.append({
+                    "role": "assistant", 
+                    "content": closing_response
+                })
+                
+                # Log to both systems
+                if st.session_state.get("airtable_record_id"):
+                    log_message(
+                        st.session_state.airtable_record_id,
+                        st.session_state.message_counter,
+                        "assistant",
+                        closing_response
+                    )
+                
+                if st.session_state.get("player_record_id"):
+                    log_message_to_sss(
+                        st.session_state.player_record_id,
+                        st.session_state.session_id,
+                        st.session_state.message_counter,
+                        "assistant",
+                        closing_response
+                    )
+                
+                # Mark session as completed
+                if st.session_state.get("player_record_id"):
+                    session_marked = mark_session_completed(
+                        st.session_state.player_record_id,
+                        st.session_state.session_id
+                    )
+                    if session_marked:
+                        st.success("✅ Session marked as completed!")
+                        
+                        # Generate session summary
+                        with st.spinner("🧠 Generating session summary..."):
+                            summary_created = process_completed_session(
+                                st.session_state.player_record_id,
+                                st.session_state.session_id,
+                                claude_client
+                            )
+                            if summary_created:
+                                st.success("📝 Session summary generated and saved!")
+                            else:
+                                st.warning("⚠️ Session completed but summary generation had issues.")
+                
+                # Show session end options
+                show_session_end_message()
+                return
+        
+        # Normal message processing (not ending)
+        with st.chat_message("assistant"):
+            with st.spinner("Coach is thinking..."):
+                chunks = query_pinecone(index, prompt, top_k)
+                
+                if chunks:
+                    full_prompt = build_conversational_prompt(
+                        prompt, 
+                        chunks, 
+                        st.session_state.messages[:-1]
+                    )
+                    
+                    response = query_claude(claude_client, full_prompt)
+                    
+                    st.markdown(response)
+                    
+                    st.session_state.message_counter += 1
+                    
+                    st.session_state.messages.append({
+                        "role": "assistant", 
+                        "content": response
+                    })
+                    
+                    st.session_state.conversation_log.append({
+                        "role": "assistant", 
+                        "content": response,
+                        "chunks": chunks,
+                        "timestamp": time.time(),
+                        "prompt_used": full_prompt
+                    })
+                    
+                    # Log assistant response to both systems
+                    if st.session_state.get("airtable_record_id"):
+                        log_message(
+                            st.session_state.airtable_record_id,
+                            st.session_state.message_counter,
+                            "assistant",
+                            response,
+                            chunks
+                        )
+                    
+                    # Log to SSS Active_Sessions
+                    if st.session_state.get("player_record_id"):
+                        log_message_to_sss(
+                            st.session_state.player_record_id,
+                            st.session_state.session_id,
+                            st.session_state.message_counter,
+                            "assistant",
+                            response,
+                            chunks
+                        )
+                    
+                    update_session_stats(st.session_state.session_id, st.session_state.message_counter)
+                    
+                else:
+                    error_msg = "Could you rephrase that? I want to give you the best coaching advice possible."
+                    st.markdown(error_msg)
+                    st.session_state.message_counter += 1
+                    
+                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                    st.session_state.conversation_log.append({
+                        "role": "assistant", 
+                        "content": error_msg,
+                        "timestamp": time.time()
+                    })
+                    
+                    # Log error message to both systems
+                    if st.session_state.get("airtable_record_id"):
+                        log_message(
+                            st.session_state.airtable_record_id,
+                            st.session_state.message_counter,
+                            "assistant",
+                            error_msg
+                        )
+                    
+                    # Log to SSS Active_Sessions
+                    if st.session_state.get("player_record_id"):
+                        log_message_to_sss(
+                            st.session_state.player_record_id,
+                            st.session_state.session_id,
+                            st.session_state.message_counter,
+                            "assistant",
+                            error_msg
+                        )
 
 if __name__ == "__main__":
-   main()
+    main()
