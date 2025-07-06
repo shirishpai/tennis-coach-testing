@@ -722,27 +722,9 @@ def main():
                     st.error("Please enter a valid email address.")
                 else:
                     with st.spinner("Setting up your coaching session..."):
-                        existing_player = find_player_by_email(player_email)
-                        
-                        if existing_player:
-                            player_data = existing_player['fields']
-                            st.session_state.player_record_id = existing_player['id']
-                            st.session_state.is_returning_player = True
-                            player_name = player_data.get('name', 'there')
-                            welcome_type = "returning"
-                            session_info = f"This is session #{player_data.get('total_sessions', 0) + 1}"
-                            update_player_session_count(existing_player['id'])
-                        else:
-                            new_player = create_new_player(player_email)
-                            if new_player:
-                                st.session_state.player_record_id = new_player['id']
-                                st.session_state.is_returning_player = False
-                                player_name = "there"
-                                welcome_type = "new"
-                                session_info = "Welcome to your first session!"
-                            else:
-                                st.error("Error creating player profile. Please try again.")
-                                return
+                        welcome_msg = setup_player_session_with_continuity(player_email)
+                        if not welcome_msg:
+                            return
                         
                         st.session_state.player_email = player_email
                         st.session_state.player_setup_complete = True
@@ -750,27 +732,7 @@ def main():
                         session_id = str(uuid.uuid4())[:8]
                         st.session_state.session_id = session_id
                         st.session_state.messages = []
-                        st.session_state.message_counter = 0
-                        
-                        if welcome_type == "returning":
-                            # Load recent coaching history
-                            recent_summaries = get_player_recent_summaries(existing_player['id'], 2)
-                            
-                            if recent_summaries:
-                                last_session = recent_summaries[0]
-                                context_text = f"\n\nLast session we worked on: {last_session.get('technical_focus', 'technique practice')}"
-                                if last_session.get('homework_assigned'):
-                                    context_text += f"\n\nI assigned you: {last_session.get('homework_assigned', '')}"
-                                if last_session.get('next_session_focus'):
-                                    context_text += f"\n\nToday I'd like to focus on: {last_session.get('next_session_focus', '')}"
-                                context_text += "\n\nHow did that practice go? Ready to continue?"
-                            else:
-                                context_text = "\n\nWhat shall we work on today?"
-                            
-                            welcome_msg = f"👋 Hi! This is your Coach TA. Great to see you back, {player_name}!\n\n{session_info}{context_text}"
-                        else:
-                            welcome_msg = f"👋 Hi! This is your Coach TA. {session_info}\n\nI'm here to help you improve your tennis game. What shall we work on today?\n\nI can help with technique, strategy, mental game, or any specific issues you're having on court."
-                        
+                        st.session_state.message_counter = 0                        
                         st.session_state.messages = [{"role": "assistant", "content": welcome_msg}]
                         
                         if st.session_state.get("player_record_id"):
@@ -877,10 +839,12 @@ def main():
                 chunks = query_pinecone(index, prompt, top_k)
                 
                 if chunks:
-                    full_prompt = build_conversational_prompt(
+                    coaching_history = st.session_state.get('coaching_history', [])
+                    full_prompt = build_conversational_prompt_with_history(
                         prompt, 
                         chunks, 
-                        st.session_state.messages[:-1]
+                        st.session_state.messages[:-1],
+                        coaching_history
                     )
                     
                     response = query_claude(claude_client, full_prompt)
