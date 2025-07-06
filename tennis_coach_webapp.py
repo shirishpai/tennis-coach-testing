@@ -591,6 +591,7 @@ What's your main focus today? 🎾"""
 
 # ENHANCED: Build conversational prompt with coaching history
 def build_conversational_prompt_with_history(user_question: str, context_chunks: list, conversation_history: list, coaching_history: list = None) -> str:
+    print(f"DEBUG: Coaching history received: {len(coaching_history) if coaching_history else 0} sessions")
     """
     Build Claude prompt including coaching history for better continuity
     """
@@ -615,7 +616,7 @@ Your goal is to provide personalized, actionable advice that helps players impro
         coaching_context += "\nUse this history to provide continuity and reference previous work when relevant."
     
     # Build the full prompt
-    context_text = "\n\n".join([chunk.get('content', '') for chunk in context_chunks if chunk.get('content')])
+    context_text = "\n\n".join([chunk.get('text', '') for chunk in context_chunks if chunk.get('text')])
     
     recent_conversation = ""
     if conversation_history:
