@@ -500,6 +500,35 @@ def log_message_to_sss(player_record_id: str, session_id: str, message_order: in
         
     except Exception as e:
         return False
+def get_player_recent_summaries(player_record_id: str, limit: int = 3) -> list:
+    try:
+        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Session_Summaries"
+        headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
+        
+        params = {
+            "filterByFormula": f"{{player_id}} = '{player_record_id}'",
+            "sort[0][field]": "session_number",
+            "sort[0][direction]": "desc",
+            "maxRecords": limit
+        }
+        
+        response = requests.get(url, headers=headers, params=params)
+        if response.status_code == 200:
+            records = response.json().get('records', [])
+            summaries = []
+            for record in records:
+                fields = record.get('fields', {})
+                summaries.append({
+                    'session_number': fields.get('session_number', 0),
+                    'technical_focus': fields.get('technical_focus', ''),
+                    'homework_assigned': fields.get('homework_assigned', ''),
+                    'next_session_focus': fields.get('next_session_focus', ''),
+                    'key_breakthroughs': fields.get('key_breakthroughs', '')
+                })
+            return summaries
+        return []
+    except Exception as e:
+        return []
 def main():
     st.set_page_config(
         page_title="Tennis Coach AI",
