@@ -667,27 +667,27 @@ def setup_player_session_with_continuity(player_email: str):
         
         update_player_session_count(existing_player['id'])
         
-            else:
-                # New player
-                new_player = create_new_player(player_email, st.session_state.get('player_name_input', ''))
-                if new_player:
-                    st.session_state.player_record_id = new_player['id']
-                    st.session_state.is_returning_player = False
-                    st.session_state.coaching_history = []
-                    welcome_msg = generate_personalized_welcome_message("there", 1, [], False)
-                else:
-                    st.error("Error creating player profile. Please try again.")
-                    return None
-        if new_player:
-            st.session_state.player_record_id = new_player['id']
-            st.session_state.is_returning_player = False
-            st.session_state.coaching_history = []
-            welcome_msg = generate_personalized_welcome_message("there", 1, [], False)
         else:
-            st.error("Error creating player profile. Please try again.")
-            return None
+            # New player
+            new_player = create_new_player(player_email, st.session_state.get('player_name_input', ''))
+            if new_player:
+                st.session_state.player_record_id = new_player['id']
+                st.session_state.is_returning_player = False
+                st.session_state.coaching_history = []
+                welcome_msg = generate_personalized_welcome_message("there", 1, [], False)
+            else:
+                st.error("Error creating player profile. Please try again.")
+                return None
+            if new_player:
+                st.session_state.player_record_id = new_player['id']
+                st.session_state.is_returning_player = False
+                st.session_state.coaching_history = []
+                welcome_msg = generate_personalized_welcome_message("there", 1, [], False)
+            else:
+                st.error("Error creating player profile. Please try again.")
+                return None
     
-    return welcome_msg
+        return welcome_msg
 
 def main():
     st.set_page_config(
