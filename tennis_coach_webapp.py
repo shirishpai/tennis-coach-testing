@@ -179,6 +179,8 @@ def create_new_player(email: str):
         
         response = requests.post(url, headers=headers, json=data)
         
+        st.error(f"DEBUG: Create player response code: {response.status_code}")
+        st.error(f"DEBUG: Create player response: {response.text}")
         if response.status_code == 200:
             return response.json()
         return None
