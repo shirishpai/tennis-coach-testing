@@ -658,6 +658,7 @@ def setup_player_session_with_continuity(player_email: str):
         # Load recent coaching history
         with st.spinner("Loading your coaching history..."):
             recent_summaries = get_player_recent_summaries(existing_player['id'], 2)
+            st.error(f"DEBUG: Retrieved {len(recent_summaries)} summaries from Airtable for player {existing_player['id']}")
             st.session_state.coaching_history = recent_summaries
         
         # Generate welcome message for returning player
