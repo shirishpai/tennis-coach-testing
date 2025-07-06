@@ -167,9 +167,7 @@ def create_new_player(email: str):
             "fields": {
                 "email": email,
                 "name": "",
-                "tennis_level": "Unknown",
                 "primary_goals": [],
-                "learning_style": "Unknown",
                 "personality_notes": "",
                 "total_sessions": 1,
                 "first_session_date": time.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
