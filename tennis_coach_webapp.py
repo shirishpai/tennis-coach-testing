@@ -391,7 +391,6 @@ def save_session_summary(player_record_id: str, session_number: int, summary_dat
             "fields": {
                 "player_id": [player_record_id],
                 "session_number": session_number,
-                "session_date": time.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
                 "technical_focus": summary_data.get('technical_focus', '')[:1000],
                 "mental_game_notes": summary_data.get('mental_game_notes', '')[:1000],
                 "homework_assigned": summary_data.get('homework_assigned', '')[:1000], 
