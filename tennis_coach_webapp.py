@@ -650,8 +650,10 @@ def main():
                     # st.error(f"DEBUG: Session marked result: {session_marked}")
                     if session_marked:
                         # st.error("DEBUG: Entering summary generation block")
+                        pass
                     else:
                         # st.error("DEBUG: Session marked returned False - no summary generation")
+                        pass
                     if session_marked:
                         st.success("✅ Session marked as completed!")
                         
