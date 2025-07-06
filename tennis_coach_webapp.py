@@ -411,6 +411,7 @@ def save_session_summary(player_record_id: str, session_number: int, summary_dat
         return False
 
 def process_completed_session(player_record_id: str, session_id: str, claude_client) -> bool:
+    st.error(f"DEBUG: process_completed_session called - START")
     try:
         st.error(f"DEBUG: Getting messages for session {session_id}")
         messages = get_session_messages(player_record_id, session_id)
