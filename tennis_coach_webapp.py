@@ -603,10 +603,12 @@ def main():
                 
                 # Mark session as completed
                 if st.session_state.get("player_record_id"):
+                    st.error(f"DEBUG: About to mark session complete - Player: {st.session_state.player_record_id}")
                     session_marked = mark_session_completed(
                         st.session_state.player_record_id,
                         st.session_state.session_id
                     )
+                    st.error(f"DEBUG: Session marked result: {session_marked}")
                     if session_marked:
                         st.success("✅ Session marked as completed!")
                         
