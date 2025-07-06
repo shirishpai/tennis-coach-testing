@@ -274,6 +274,8 @@ def get_session_messages(player_record_id: str, session_id: str) -> list:
         return []
 def generate_session_summary(messages: list, claude_client) -> dict:
     try:
+        st.error(f"DEBUG: Starting summary generation with {len(messages)} messages")
+        st.error(f"DEBUG: Sample message: {messages[0] if messages else 'None'}")
         conversation_text = ""
         for msg in messages:
             role_label = "Player" if msg['role'] == 'player' else "Coach"
@@ -359,6 +361,7 @@ CONDENSED_SUMMARY: [your analysis]"""
         return summary_data
         
     except Exception as e:
+        st.error(f"DEBUG: Summary generation failed with error: {str(e)}")
         return {
             'technical_focus': 'Summary generation failed',
             'mental_game_notes': '',
