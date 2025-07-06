@@ -436,14 +436,14 @@ def save_session_summary(player_record_id: str, session_number: int, summary_dat
         return False
 
 def process_completed_session(player_record_id: str, session_id: str, claude_client) -> bool:
-    st.error(f"DEBUG: process_completed_session called - START")
+    # st.error(f"DEBUG: process_completed_session called - START")
     try:
-        st.error(f"DEBUG: Getting messages for session {session_id}")
+        # st.error(f"DEBUG: Getting messages for session {session_id}")
         messages = get_session_messages(player_record_id, session_id)
-        st.error(f"DEBUG: Retrieved {len(messages)} messages")
+        # st.error(f"DEBUG: Retrieved {len(messages)} messages")
         
         if not messages:
-            st.error("DEBUG: No messages found - returning False")
+            # st.error("DEBUG: No messages found - returning False")
             return False
         
         summary_data = generate_session_summary(messages, claude_client)
@@ -642,29 +642,29 @@ def main():
                 
                 # Mark session as completed
                 if st.session_state.get("player_record_id"):
-                    st.error(f"DEBUG: About to mark session complete - Player: {st.session_state.player_record_id}")
+                    # st.error(f"DEBUG: About to mark session complete - Player: {st.session_state.player_record_id}")
                     session_marked = mark_session_completed(
                         st.session_state.player_record_id,
                         st.session_state.session_id
                     )
-                    st.error(f"DEBUG: Session marked result: {session_marked}")
+                    # st.error(f"DEBUG: Session marked result: {session_marked}")
                     if session_marked:
-                        st.error("DEBUG: Entering summary generation block")
+                        # st.error("DEBUG: Entering summary generation block")
                     else:
-                        st.error("DEBUG: Session marked returned False - no summary generation")
+                        # st.error("DEBUG: Session marked returned False - no summary generation")
                     if session_marked:
                         st.success("✅ Session marked as completed!")
                         
                         
                         # Generate session summary
                         with st.spinner("🧠 Generating session summary..."):
-                            st.error(f"DEBUG: About to process session - Player: {st.session_state.player_record_id}, Session: {st.session_state.session_id}")
+                            # st.error(f"DEBUG: About to process session - Player: {st.session_state.player_record_id}, Session: {st.session_state.session_id}")
                             summary_created = process_completed_session(
                                 st.session_state.player_record_id,
                                 st.session_state.session_id,
                                 claude_client
                             )
-                            st.error(f"DEBUG: Summary result: {summary_created}")
+                            # st.error(f"DEBUG: Summary result: {summary_created}")
                             if summary_created:
                                 st.success("📝 Session summary generated and saved!")
                             else:
