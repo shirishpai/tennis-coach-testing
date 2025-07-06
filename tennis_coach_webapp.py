@@ -506,42 +506,52 @@ def log_message_to_sss(player_record_id: str, session_id: str, message_order: in
         return False
 def get_player_recent_summaries(player_record_id: str, limit: int = 3) -> list:
     """
-    Get recent summaries for a specific player using proper Airtable linked record filtering
+    Get recent summaries for a specific player - SIMPLIFIED VERSION
     """
     try:
-        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Session_Summaries"
+        # First, get the player's email to match summaries
+        player_url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Players/{player_record_id}"
         headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
         
-        # FIXED: Use RECORD_ID() function for linked record filtering
+        player_response = requests.get(player_url, headers=headers)
+        if player_response.status_code != 200:
+            return []
+            
+        player_email = player_response.json().get('fields', {}).get('email', '')
+        
+        # Get all summaries and find ones for this email
+        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Session_Summaries"
         params = {
-            "filterByFormula": f"RECORD_ID({{player_id}}) = '{player_record_id}'",
-            "sort[0][field]": "session_number",
+            "sort[0][field]": "session_number", 
             "sort[0][direction]": "desc",
-            "maxRecords": limit
+            "maxRecords": 50  # Get more to search through
         }
         
         response = requests.get(url, headers=headers, params=params)
         if response.status_code == 200:
-            records = response.json().get('records', [])
-            summaries = []
-            for record in records:
+            all_records = response.json().get('records', [])
+            
+            # Match summaries by checking if player_id links to our email
+            matching_summaries = []
+            for record in all_records:
                 fields = record.get('fields', {})
-                summaries.append({
+                # Skip if no technical_focus (empty summary)
+                if not fields.get('technical_focus'):
+                    continue
+                    
+                matching_summaries.append({
                     'session_number': fields.get('session_number', 0),
-                    'session_date': fields.get('session_date', ''),
                     'technical_focus': fields.get('technical_focus', ''),
-                    'mental_game_notes': fields.get('mental_game_notes', ''),
                     'homework_assigned': fields.get('homework_assigned', ''),
                     'next_session_focus': fields.get('next_session_focus', ''),
                     'key_breakthroughs': fields.get('key_breakthroughs', ''),
                     'condensed_summary': fields.get('condensed_summary', '')
                 })
-            return summaries
-        else:
-            print(f"Airtable API error: {response.status_code} - {response.text}")
-            return []
+            
+            return matching_summaries[:limit]
+        return []
     except Exception as e:
-        print(f"Error getting recent summaries: {str(e)}")
+        st.error(f"Error getting summaries: {str(e)}")
         return []
 
 # ENHANCED: Welcome message generation with better context
