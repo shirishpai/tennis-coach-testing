@@ -155,7 +155,7 @@ def find_player_by_email(email: str):
     except Exception as e:
         return None
 
-def create_new_player(email: str):
+def create_new_player(email: str, name: str = ""):
     try:
         url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Players"
         headers = {
@@ -163,10 +163,17 @@ def create_new_player(email: str):
             "Content-Type": "application/json"
         }
         
+        # Use provided name, or extract from email, or leave empty for anonymous
+        if name:
+            player_name = name
+        else:
+            # Extract name from email as fallback
+            player_name = email.split('@')[0].replace('.', ' ').title()
+        
         data = {
             "fields": {
                 "email": email,
-                "name": "",
+                "name": player_name,
                 "primary_goals": [],
                 "personality_notes": "",
                 "total_sessions": 1,
@@ -177,13 +184,10 @@ def create_new_player(email: str):
         
         response = requests.post(url, headers=headers, json=data)
         
-        st.error(f"DEBUG: Create player response code: {response.status_code}")
-        st.error(f"DEBUG: Create player response: {response.text}")
         if response.status_code == 200:
             return response.json()
         return None
     except Exception as e:
-        st.error(f"Exception details: {str(e)}")
         return None
 
 def detect_session_end(message_content: str) -> bool:
@@ -663,9 +667,17 @@ def setup_player_session_with_continuity(player_email: str):
         
         update_player_session_count(existing_player['id'])
         
-    else:
-        # New player
-        new_player = create_new_player(player_email)
+        else:
+            # New player
+            new_player = create_new_player(player_email, st.session_state.get('player_name_input', ''))
+            if new_player:
+                st.session_state.player_record_id = new_player['id']
+                st.session_state.is_returning_player = False
+                st.session_state.coaching_history = []
+                welcome_msg = generate_personalized_welcome_message("there", 1, [], False)
+            else:
+                st.error("Error creating player profile. Please try again.")
+                return None
         if new_player:
             st.session_state.player_record_id = new_player['id']
             st.session_state.is_returning_player = False
@@ -716,11 +728,19 @@ def main():
                 placeholder="your.email@example.com",
                 help="Required for session continuity and progress tracking"
             )
+
+            player_name = st.text_input(
+                "Name (optional)", 
+                placeholder="What would you like the coach to call you?",
+                help="Leave blank if you prefer to stay anonymous"
+            )
             
             if st.form_submit_button("Start Coaching Session", type="primary"):
                 if not player_email or "@" not in player_email:
                     st.error("Please enter a valid email address.")
                 else:
+                    # Store the optional name in session state
+                    st.session_state.player_name_input = player_name.strip() if player_name else ""
                     with st.spinner("Setting up your coaching session..."):
                         welcome_msg = setup_player_session_with_continuity(player_email)
                         if not welcome_msg:
