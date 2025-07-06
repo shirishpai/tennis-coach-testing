@@ -81,7 +81,6 @@ def query_pinecone(index, question: str, top_k: int = 3) -> List[Dict]:
     except Exception as e:
         st.error(f"Pinecone query error: {e}")
         return []
-
 def build_conversational_prompt(question: str, chunks: List[Dict], conversation_history: List[Dict]) -> str:
     context_sections = []
     for i, chunk in enumerate(chunks):
@@ -104,92 +103,45 @@ Content: {chunk['text']}
 Guidelines:
 - CRITICAL: Keep responses very short - maximum 3-4 sentences (phone screen length)
 - Focus on ONE specific tip or correction per response
-- Give advice for SOLO practice or general technique
-def create_session_record(session_id: str, tester_name: str) -> str:
-    try:
-        url = f"https://api.airtable.com/v0/{st.secrets['AIRTABLE_BASE_ID']}/Test_Sessions"
-        headers = {
-            "Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}",
-            "Content-Type": "application/json"
-        }
-        device_info = f"{platform.system()} - {platform.processor()}"
-        data = {
-            "fields": {
-                "session_id": session_id,
-                "tester_name": tester_name,
-                "total_messages": 0,
-                "device_info": device_info
-            }
-        }
-        response = requests.post(url, headers=headers, json=data)
-        if response.status_code == 200:
-            record_data = response.json()
-            record_id = record_data['id']
-            return record_id
-        else:
-            return None
-    except Exception as e:
-        return None
+- Give advice for SOLO practice or general technique improvement
+- Ask one engaging follow-up question to continue the conversation
+- Use encouraging, supportive tone
+- Be direct and actionable
+- DO NOT suggest feeding balls, court positioning, or activities requiring a coach present
+- Focus on: technique tips, solo drills, mental approach, general strategy
 
-def log_message(session_record_id: str, message_order: int, role: str, content: str, chunks=None) -> bool:
-    try:
-        url = f"https://api.airtable.com/v0/{st.secrets['AIRTABLE_BASE_ID']}/Conversation_Log"
-        headers = {
-            "Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}",
-            "Content-Type": "application/json"
-        }
-        resource_details = ""
-        resources_count = 0
-        if chunks:
-            resources_count = len(chunks)
-            resource_details = "\n".join([
-                f"Resource {i+1}: {chunk['topics']} (Score: {chunk['score']:.3f}) - {chunk['skill_level']}"
-                for i, chunk in enumerate(chunks)
-            ])
-        data = {
-            "fields": {
-                "session_id": [session_record_id],
-                "message_order": message_order,
-                "role": role,
-                "message_content": content[:100000],
-                "coaching_resources_used": resources_count,
-                "resource_details": resource_details
-            }
-        }
-        response = requests.post(url, headers=headers, json=data)
-        return response.status_code == 200
-    except Exception as e:
-        return False
+{history_text}
 
-def update_session_stats(session_id: str, total_messages: int) -> bool:
-    try:
-        url = f"https://api.airtable.com/v0/{st.secrets['AIRTABLE_BASE_ID']}/Test_Sessions"
-        headers = {
-            "Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"
-        }
-        params = {
-            "filterByFormula": f"{{session_id}} = '{session_id}'"
-        }
-        response = requests.get(url, headers=headers, params=params)
-        if response.status_code == 200:
-            records = response.json().get('records', [])
-            if records:
-                record_id = records[0]['id']
-                update_url = f"{url}/{record_id}"
-                update_data = {
-                    "fields": {
-                        "total_messages": total_messages,
-                        "end_time": time.strftime("%Y-%m-%dT%H:%M:%S.000Z")
-                    }
-                }
-                update_response = requests.patch(update_url, headers=headers, json=update_data)
-                return update_response.status_code == 200
-        return False
-    except Exception as e:
-        return False
+Professional Coaching Resources:
+{context_text}
+
+Current Player Question: "{question}"
+
+Respond as their remote tennis coach with a SHORT, focused response:"""
+
+def query_claude(client, prompt: str) -> str:
+    import time
+    max_retries = 3
+    retry_delay = 2
+    
+    for attempt in range(max_retries):
+        try:
+            response = client.messages.create(
+                model="claude-3-5-sonnet-20241022",
+                max_tokens=300,
+                messages=[
+                    {"role": "user", "content": prompt}
+                ]
+            )
+            return response.content[0].text
+        except Exception as e:
+            if "529" in str(e) or "overloaded" in str(e).lower():
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay * (attempt + 1))
+                    continue
+            return f"Error generating coaching response: {e}"
 
 def find_player_by_email(email: str):
-    """Look up player in SSS Players table by email"""
     try:
         url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Players"
         headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
@@ -204,7 +156,6 @@ def find_player_by_email(email: str):
         return None
 
 def create_new_player(email: str):
-    """Create new player record with just email (coach will gather other info)"""
     try:
         url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Players"
         headers = {
@@ -235,34 +186,7 @@ def create_new_player(email: str):
         st.error(f"Exception details: {str(e)}")
         return None
 
-def update_player_session_count(player_record_id: str):
-    # Update player's total sessions
-    try:
-        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Players/{player_record_id}"
-        headers = {
-            "Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}",
-            "Content-Type": "application/json"
-        }
-        
-        response = requests.get(url, headers=headers)
-        if response.status_code == 200:
-            current_data = response.json()
-            current_sessions = current_data.get('fields', {}).get('total_sessions', 0)
-            
-            update_data = {
-                "fields": {
-                    "total_sessions": current_sessions + 1
-                }
-            }
-            
-            update_response = requests.patch(url, headers=headers, json=update_data)
-            return update_response.status_code == 200
-        return False
-    except Exception as e:
-        return False
-
 def detect_session_end(message_content: str) -> bool:
-    """Detect if user message indicates session should end"""
     goodbye_phrases = [
         "thanks", "thank you", "bye", "goodbye", "see you", "done", 
         "that's all", "finished", "end session", "stop", "quit",
@@ -284,7 +208,6 @@ def detect_session_end(message_content: str) -> bool:
     return False
 
 def mark_session_completed(player_record_id: str, session_id: str) -> bool:
-    """Mark all active messages for this session as completed"""
     try:
         url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
         headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
@@ -322,7 +245,6 @@ def mark_session_completed(player_record_id: str, session_id: str) -> bool:
         return False
 
 def get_session_messages(player_record_id: str, session_id: str) -> list:
-    """Retrieve all messages from a completed session"""
     try:
         url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
         headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
@@ -351,7 +273,6 @@ def get_session_messages(player_record_id: str, session_id: str) -> list:
     except Exception as e:
         return []
 def generate_session_summary(messages: list, claude_client) -> dict:
-    """Use Claude to generate structured session summary"""
     try:
         conversation_text = ""
         for msg in messages:
@@ -448,7 +369,6 @@ CONDENSED_SUMMARY: [your analysis]"""
         }
 
 def save_session_summary(player_record_id: str, session_number: int, summary_data: dict, original_message_count: int) -> bool:
-    """Save the generated summary to Session_Summaries table"""
     try:
         url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Session_Summaries"
         headers = {
@@ -483,7 +403,6 @@ def save_session_summary(player_record_id: str, session_number: int, summary_dat
         return False
 
 def process_completed_session(player_record_id: str, session_id: str, claude_client) -> bool:
-    """Complete session processing: generate summary and save"""
     try:
         messages = get_session_messages(player_record_id, session_id)
         if not messages:
@@ -513,19 +432,7 @@ def process_completed_session(player_record_id: str, session_id: str, claude_cli
     except Exception as e:
         return False
 
-def show_session_end_message():
-    """Display session completion message"""
-    st.success("🎾 **Session Complete!** Thanks for training with Coach TA today.")
-    st.info("💡 **Your session has been saved.** When you return, I'll remember what we worked on and continue building on your progress!")
-    
-    if st.button("🔄 Start New Session", type="primary"):
-        for key in list(st.session_state.keys()):
-            if key not in ['player_email', 'player_record_id']:
-                del st.session_state[key]
-        st.rerun()
-
 def log_message_to_sss(player_record_id: str, session_id: str, message_order: int, role: str, content: str, chunks=None) -> bool:
-    """Log message to SSS Active_Sessions table"""
     try:
         url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
         headers = {
@@ -555,7 +462,6 @@ def log_message_to_sss(player_record_id: str, session_id: str, message_order: in
         
     except Exception as e:
         return False
-
 def main():
     st.set_page_config(
         page_title="Tennis Coach AI",
@@ -584,18 +490,6 @@ def main():
             st.session_state.conversation_log = []
             st.session_state.player_setup_complete = False
             st.rerun()
-        
-        if 'conversation_log' in st.session_state and st.session_state.conversation_log:
-            st.markdown(f"**Session messages:** {len(st.session_state.conversation_log)}")
-            
-            with st.expander("📋 Full Session Log"):
-                for i, entry in enumerate(st.session_state.conversation_log):
-                    st.markdown(f"**Message {i+1}:** {entry['role']}")
-                    st.markdown(f"*Content:* {entry['content'][:100]}...")
-                    if 'chunks' in entry:
-                        st.markdown(f"*Sources used:* {len(entry['chunks'])} resources")
-                        for j, chunk in enumerate(entry['chunks']):
-                            st.markdown(f"  - Resource {j+1}: {chunk['topics']} (score: {chunk['score']:.3f})")
     
     if not st.session_state.get("player_setup_complete"):
         with st.form("player_setup"):
@@ -619,20 +513,14 @@ def main():
                             player_data = existing_player['fields']
                             st.session_state.player_record_id = existing_player['id']
                             st.session_state.is_returning_player = True
-                            st.session_state.previous_sessions = player_data.get('total_sessions', 0)
                             player_name = player_data.get('name', 'there')
-                            
-                            update_player_session_count(existing_player['id'])
-                            
                             welcome_type = "returning"
                             session_info = f"This is session #{player_data.get('total_sessions', 0) + 1}"
-                            
                         else:
                             new_player = create_new_player(player_email)
                             if new_player:
                                 st.session_state.player_record_id = new_player['id']
                                 st.session_state.is_returning_player = False
-                                st.session_state.previous_sessions = 0
                                 player_name = "there"
                                 welcome_type = "new"
                                 session_info = "Welcome to your first session!"
@@ -645,32 +533,15 @@ def main():
                         
                         session_id = str(uuid.uuid4())[:8]
                         st.session_state.session_id = session_id
-                        st.session_state.airtable_record_id = None
                         st.session_state.messages = []
-                        st.session_state.conversation_log = []
                         st.session_state.message_counter = 0
                         
-                        airtable_record_id = create_session_record(session_id, player_email)
-                        if airtable_record_id:
-                            st.session_state.airtable_record_id = airtable_record_id
-                        
                         if welcome_type == "returning":
-                            welcome_msg = f"""👋 Hi! This is your Coach TA. Great to see you back, {player_name}!
-                            
-{session_info} - What shall we work on today?"""
+                            welcome_msg = f"👋 Hi! This is your Coach TA. Great to see you back, {player_name}!\n\n{session_info} - What shall we work on today?"
                         else:
-                            welcome_msg = f"""👋 Hi! This is your Coach TA. {session_info}
-                            
-I'm here to help you improve your tennis game. What shall we work on today?
-
-I can help with technique, strategy, mental game, or any specific issues you're having on court."""
+                            welcome_msg = f"👋 Hi! This is your Coach TA. {session_info}\n\nI'm here to help you improve your tennis game. What shall we work on today?\n\nI can help with technique, strategy, mental game, or any specific issues you're having on court."
                         
                         st.session_state.messages = [{"role": "assistant", "content": welcome_msg}]
-                        st.session_state.conversation_log = [{
-                            "role": "assistant", 
-                            "content": welcome_msg,
-                            "timestamp": time.time()
-                        }]
                         
                         if st.session_state.get("player_record_id"):
                             log_message_to_sss(
@@ -694,21 +565,6 @@ I can help with technique, strategy, mental game, or any specific issues you're 
             st.session_state.session_ending = True
         
         st.session_state.message_counter += 1
-        
-        st.session_state.conversation_log.append({
-            "role": "user", 
-            "content": prompt,
-            "timestamp": time.time()
-        })
-        
-        # Log user message to both systems
-        if st.session_state.get("airtable_record_id"):
-            log_message(
-                st.session_state.airtable_record_id,
-                st.session_state.message_counter,
-                "user",
-                prompt
-            )
         
         # Log to SSS Active_Sessions
         if st.session_state.get("player_record_id"):
@@ -735,15 +591,6 @@ I can help with technique, strategy, mental game, or any specific issues you're 
                     "role": "assistant", 
                     "content": closing_response
                 })
-                
-                # Log to both systems
-                if st.session_state.get("airtable_record_id"):
-                    log_message(
-                        st.session_state.airtable_record_id,
-                        st.session_state.message_counter,
-                        "assistant",
-                        closing_response
-                    )
                 
                 if st.session_state.get("player_record_id"):
                     log_message_to_sss(
@@ -775,8 +622,13 @@ I can help with technique, strategy, mental game, or any specific issues you're 
                             else:
                                 st.warning("⚠️ Session completed but summary generation had issues.")
                 
-                # Show session end options
-                show_session_end_message()
+                # Show session end message
+                st.success("🎾 **Session Complete!** Thanks for training with Coach TA today.")
+                if st.button("🔄 Start New Session", type="primary"):
+                    for key in list(st.session_state.keys()):
+                        if key not in ['player_email', 'player_record_id']:
+                            del st.session_state[key]
+                    st.rerun()
                 return
         
         # Normal message processing (not ending)
@@ -802,24 +654,6 @@ I can help with technique, strategy, mental game, or any specific issues you're 
                         "content": response
                     })
                     
-                    st.session_state.conversation_log.append({
-                        "role": "assistant", 
-                        "content": response,
-                        "chunks": chunks,
-                        "timestamp": time.time(),
-                        "prompt_used": full_prompt
-                    })
-                    
-                    # Log assistant response to both systems
-                    if st.session_state.get("airtable_record_id"):
-                        log_message(
-                            st.session_state.airtable_record_id,
-                            st.session_state.message_counter,
-                            "assistant",
-                            response,
-                            chunks
-                        )
-                    
                     # Log to SSS Active_Sessions
                     if st.session_state.get("player_record_id"):
                         log_message_to_sss(
@@ -831,28 +665,12 @@ I can help with technique, strategy, mental game, or any specific issues you're 
                             chunks
                         )
                     
-                    update_session_stats(st.session_state.session_id, st.session_state.message_counter)
-                    
                 else:
                     error_msg = "Could you rephrase that? I want to give you the best coaching advice possible."
                     st.markdown(error_msg)
                     st.session_state.message_counter += 1
                     
                     st.session_state.messages.append({"role": "assistant", "content": error_msg})
-                    st.session_state.conversation_log.append({
-                        "role": "assistant", 
-                        "content": error_msg,
-                        "timestamp": time.time()
-                    })
-                    
-                    # Log error message to both systems
-                    if st.session_state.get("airtable_record_id"):
-                        log_message(
-                            st.session_state.airtable_record_id,
-                            st.session_state.message_counter,
-                            "assistant",
-                            error_msg
-                        )
                     
                     # Log to SSS Active_Sessions
                     if st.session_state.get("player_record_id"):
@@ -865,4 +683,3 @@ I can help with technique, strategy, mental game, or any specific issues you're 
                         )
 
 if __name__ == "__main__":
-    main()
