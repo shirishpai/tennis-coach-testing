@@ -551,7 +551,7 @@ def get_player_recent_summaries(player_record_id: str, limit: int = 3) -> list:
             return matching_summaries[:limit]
         return []
     except Exception as e:
-        st.error(f"Error getting summaries: {str(e)}")
+        # st.error(f"Error getting summaries: {str(e)}")
         return []
 
 # ENHANCED: Welcome message generation with better context
@@ -606,7 +606,7 @@ def build_conversational_prompt_with_history(user_question: str, context_chunks:
     """
     
     # DEBUG LINE - shows in Streamlit as red error message
-    st.error(f"DEBUG: Coaching history received: {len(coaching_history) if coaching_history else 0} sessions")
+    # st.error(f"DEBUG: Coaching history received: {len(coaching_history) if coaching_history else 0} sessions")
     
     # Base coaching context
     coaching_context = """You are an expert tennis coach with deep knowledge of technique, strategy, and mental game. 
@@ -668,7 +668,7 @@ def setup_player_session_with_continuity(player_email: str):
         # Load recent coaching history
         with st.spinner("Loading your coaching history..."):
             recent_summaries = get_player_recent_summaries(existing_player['id'], 2)
-            st.error(f"DEBUG: Retrieved {len(recent_summaries)} summaries from Airtable for player {existing_player['id']}")
+            # st.error(f"DEBUG: Retrieved {len(recent_summaries)} summaries from Airtable for player {existing_player['id']}")
             st.session_state.coaching_history = recent_summaries
         
         # Generate welcome message for returning player
