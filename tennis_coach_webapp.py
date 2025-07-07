@@ -779,6 +779,7 @@ def setup_player_session_with_continuity(player_email: str):
         
         with st.spinner("Loading your coaching history..."):
             recent_summaries = get_player_recent_summaries(existing_player['id'], 2)
+            st.error(f"DEBUG HISTORY: Found {len(recent_summaries)} summaries: {recent_summaries}")
             st.session_state.coaching_history = recent_summaries
         
         if recent_summaries:
