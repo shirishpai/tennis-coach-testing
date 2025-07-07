@@ -156,6 +156,7 @@ def find_player_by_email(email: str):
         return None
 
 def update_player_info(player_id: str, name: str = "", tennis_level: str = ""):
+    st.error("DEBUG: update_player_info function called!")
     """Update existing player with name and tennis level collected during coaching"""
     try:
         url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Players/{player_id}"
