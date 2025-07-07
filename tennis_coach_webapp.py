@@ -197,14 +197,44 @@ def create_new_player(email: str, name: str = "", tennis_level: str = ""):
         # Normalize email to lowercase
         email = email.lower().strip()
         
-        # ... rest of function unchanged
-        data = {
-            "fields": {
-                "email": email,  # Now lowercase
-                # ... rest unchanged
-            }
+        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Players"
+        headers = {
+            "Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}",
+            "Content-Type": "application/json"
         }
-        # ... rest unchanged
+        
+        # Use provided name, or extract from email, or leave empty for Coach TA collection
+        if name:
+            player_name = name
+        else:
+            # For new players, leave empty - Coach TA will collect it
+            player_name = ""
+        
+        # Prepare fields
+        fields = {
+            "email": email,  # Now lowercase
+            "name": player_name,
+            "primary_goals": [],
+            "personality_notes": "",
+            "total_sessions": 1,
+            "first_session_date": time.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+            "player_status": "Active"
+        }
+        
+        # Only add tennis_level if it has a valid value
+        if tennis_level and tennis_level in ["Beginner", "Intermediate", "Advanced"]:
+            fields["tennis_level"] = tennis_level
+        # Don't include tennis_level field at all if empty - let Airtable handle default
+        
+        data = {"fields": fields}
+        
+        response = requests.post(url, headers=headers, json=data)
+        
+        if response.status_code == 200:
+            return response.json()
+        return None
+    except Exception as e:
+        return None
 
 def detect_session_end(message_content: str) -> bool:
     goodbye_phrases = [
