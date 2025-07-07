@@ -676,17 +676,15 @@ def extract_name_from_response(user_message: str) -> str:
         return message.title()
 
 def assess_player_level_from_conversation(conversation_history: list, claude_client) -> str:
-    """Use Claude to assess player's tennis level based on their responses during intro"""
-    # Extract just the player's responses from intro conversation
+    # Use Claude to assess player's tennis level based on their responses during intro
     player_responses = []
     for msg in conversation_history:
         if msg["role"] == "user":
             player_responses.append(msg["content"])
     
-    if len(player_responses) < 2:  # Need at least name + some tennis discussion
-        return "beginner"  # Default fallback
+    if len(player_responses) < 2:
+        return "beginner"
     
-    # Skip the name response, focus on tennis-related responses
     tennis_responses = player_responses[1:]
     
     assessment_prompt = f"""Analyze these player responses from a tennis coaching conversation and determine their skill level.
@@ -717,7 +715,7 @@ Respond with exactly one word: beginner, intermediate, or advanced"""
         level = response.content[0].text.strip().lower()
         return level if level in ["beginner", "intermediate", "advanced"] else "beginner"
     except:
-        return "beginner"  # Fallback
+        return "beginner"
 
 def handle_introduction_sequence(user_message: str, claude_client):
     """
