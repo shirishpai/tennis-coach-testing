@@ -159,7 +159,6 @@ def find_player_by_email(email: str):
         return None
 
 def update_player_info(player_id: str, name: str = "", tennis_level: str = ""):
-    st.error("DEBUG: update_player_info function called!")
     """Update existing player with name and tennis level collected during coaching"""
     try:
         url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Players/{player_id}"
@@ -168,11 +167,6 @@ def update_player_info(player_id: str, name: str = "", tennis_level: str = ""):
             "Content-Type": "application/json"
         }
         
-        # DEBUG: Show what we're trying to update
-        st.error(f"DEBUG UPDATE: player_id: {player_id}")
-        st.error(f"DEBUG UPDATE: name: {name}")
-        st.error(f"DEBUG UPDATE: tennis_level: {tennis_level}")
-        
         # Prepare update data
         update_data = {"fields": {}}
         if name:
@@ -180,16 +174,10 @@ def update_player_info(player_id: str, name: str = "", tennis_level: str = ""):
         if tennis_level:
             update_data["fields"]["tennis_level"] = tennis_level
         
-        st.error(f"DEBUG UPDATE: Sending data: {update_data}")
-        
         response = requests.patch(url, headers=headers, json=update_data)
-        
-        st.error(f"DEBUG UPDATE: Response status: {response.status_code}")
-        st.error(f"DEBUG UPDATE: Response text: {response.text}")
         
         return response.status_code == 200
     except Exception as e:
-        st.error(f"DEBUG UPDATE: Exception: {str(e)}")
         return False
 
 def create_new_player(email: str, name: str = "", tennis_level: str = ""):
@@ -747,35 +735,29 @@ def handle_introduction_sequence(user_message: str, claude_client):
     Handle the introduction sequence for new players with invisible level assessment
     """
     intro_state = st.session_state.get("intro_state", "waiting_for_name")
-    st.error(f"DEBUG: Current intro_state: {intro_state}")
-    st.error(f"DEBUG: User message: {user_message}")
     
     if intro_state == "waiting_for_name":
         # Extract name from user response
         player_name = extract_name_from_response(user_message)
-        st.error(f"DEBUG: Extracted name: {player_name}")
         if player_name:
             st.session_state.collected_name = player_name
             st.session_state.intro_state = "collecting_experience"
             return f"Nice to meet you, {player_name}! I am excited, tell me about your tennis. You been playing long?"    
+    
     elif intro_state == "collecting_experience":
         st.session_state.intro_state = "ready_for_assessment"
         return "What's your biggest challenge on court right now? What shots feel most comfortable to you?"
     
     elif intro_state == "ready_for_assessment":
         # Now we have enough conversation to assess level
-        st.error("DEBUG: About to assess level...")
         assessed_level = assess_player_level_from_conversation(st.session_state.messages, claude_client)
-        st.error(f"DEBUG: Assessed level: {assessed_level}")
         
         # Update player record with collected name and assessed level
-        st.error(f"DEBUG: Updating player {st.session_state.player_record_id} with name: {st.session_state.collected_name}, level: {assessed_level}")
         success = update_player_info(
             st.session_state.player_record_id,
             st.session_state.collected_name,
             assessed_level
         )
-        st.error(f"DEBUG: Update success: {success}")
         
         if success:
             st.session_state.intro_completed = True
@@ -792,13 +774,10 @@ def setup_player_session_with_continuity(player_email: str):
     """
     Enhanced player setup with proper continuity system - WITH COACH TA INTRO
     """
-    st.error(f"DEBUG: Starting setup for email: {player_email}")
-    
     existing_player = find_player_by_email(player_email)
-    st.error(f"DEBUG: Existing player result: {existing_player}")
     
     if existing_player:
-        # Returning player - EXISTING CODE
+        # Returning player
         player_data = existing_player['fields']
         st.session_state.player_record_id = existing_player['id']
         st.session_state.is_returning_player = True
@@ -825,28 +804,10 @@ def setup_player_session_with_continuity(player_email: str):
         update_player_session_count(existing_player['id'])
         
     else:
-        # NEW PLAYER - Debug this part
-        st.error("DEBUG: Creating new player...")
-        
+        # NEW PLAYER
         new_player = create_new_player(player_email, "", "")  # Empty name and level initially
-        st.error(f"DEBUG: New player result: {new_player}")
         
         if new_player:
-            st.session_state.player_record_id = new_player['id']
-            st.session_state.is_returning_player = False
-            st.session_state.coaching_history = []
-            
-            # NEW: Set introduction state
-            st.session_state.intro_state = "waiting_for_name"
-            st.session_state.intro_completed = False
-            
-            welcome_msg = "Hi! I'm Coach TA, your personal tennis coach. What's your name?"
-        else:
-            st.error("Error creating player profile. Please try again.")
-            return None
-    
-    st.error(f"DEBUG: Returning welcome message: {welcome_msg}")
-    return welcome_msg
 
 def main():
     st.set_page_config(
