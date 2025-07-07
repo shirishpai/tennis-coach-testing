@@ -192,33 +192,30 @@ def create_new_player(email: str, name: str = "", tennis_level: str = ""):
             # For new players, leave empty - Coach TA will collect it
             player_name = ""
         
-        data = {
-            "fields": {
-                "email": email,
-                "name": player_name,
-                "tennis_level": tennis_level,  # NEW: Add tennis level field
-                "primary_goals": [],
-                "personality_notes": "",
-                "total_sessions": 1,
-                "first_session_date": time.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
-                "player_status": "Active"
-            }
+        # Prepare fields
+        fields = {
+            "email": email,
+            "name": player_name,
+            "primary_goals": [],
+            "personality_notes": "",
+            "total_sessions": 1,
+            "first_session_date": time.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+            "player_status": "Active"
         }
         
-        # DEBUG: Show what we're sending
-        st.error(f"DEBUG: Sending data: {data}")
+        # Only add tennis_level if it has a valid value
+        if tennis_level and tennis_level in ["beginner", "intermediate", "advanced"]:
+            fields["tennis_level"] = tennis_level
+        # Don't include tennis_level field at all if empty - let Airtable handle default
+        
+        data = {"fields": fields}
         
         response = requests.post(url, headers=headers, json=data)
-        
-        # DEBUG: Show response
-        st.error(f"DEBUG: Response status: {response.status_code}")
-        st.error(f"DEBUG: Response content: {response.text}")
         
         if response.status_code == 200:
             return response.json()
         return None
     except Exception as e:
-        st.error(f"DEBUG: Exception occurred: {str(e)}")
         return None
 
 def detect_session_end(message_content: str) -> bool:
