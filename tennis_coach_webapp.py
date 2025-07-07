@@ -164,6 +164,11 @@ def update_player_info(player_id: str, name: str = "", tennis_level: str = ""):
             "Content-Type": "application/json"
         }
         
+        # DEBUG: Show what we're trying to update
+        st.error(f"DEBUG UPDATE: player_id: {player_id}")
+        st.error(f"DEBUG UPDATE: name: {name}")
+        st.error(f"DEBUG UPDATE: tennis_level: {tennis_level}")
+        
         # Prepare update data
         update_data = {"fields": {}}
         if name:
@@ -171,10 +176,16 @@ def update_player_info(player_id: str, name: str = "", tennis_level: str = ""):
         if tennis_level:
             update_data["fields"]["tennis_level"] = tennis_level
         
+        st.error(f"DEBUG UPDATE: Sending data: {update_data}")
+        
         response = requests.patch(url, headers=headers, json=update_data)
+        
+        st.error(f"DEBUG UPDATE: Response status: {response.status_code}")
+        st.error(f"DEBUG UPDATE: Response text: {response.text}")
         
         return response.status_code == 200
     except Exception as e:
+        st.error(f"DEBUG UPDATE: Exception: {str(e)}")
         return False
 
 def create_new_player(email: str, name: str = "", tennis_level: str = ""):
