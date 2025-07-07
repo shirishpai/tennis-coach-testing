@@ -681,27 +681,20 @@ def assess_player_level_from_conversation(conversation_history: list, claude_cli
             player_responses.append(msg["content"])
     
     if len(player_responses) < 2:
-        return "beginner"
+        return "Beginner"  # FIXED: Capital B
     
     tennis_responses = player_responses[1:]
     
-    assessment_prompt = f"""Analyze these player responses from a tennis coaching conversation and determine their skill level.
+    assessment_prompt = f"""Analyze these player responses and determine their skill level.
 
-Player responses about tennis: {' | '.join(tennis_responses)}
+Player responses: {' | '.join(tennis_responses)}
 
-Based on their language, experience mentions, technical understanding, and familiarity with tennis concepts, categorize them as:
-- "beginner" - New to tennis, basic understanding, just learning fundamentals
-- "intermediate" - Some experience, familiar with basics, working on consistency and technique
-- "advanced" - Experienced player, technical knowledge, competitive play, advanced concepts
+Categorize as:
+- "Beginner" - New to tennis, basic understanding
+- "Intermediate" - Some experience, familiar with basics  
+- "Advanced" - Experienced player, technical knowledge
 
-Look for clues like:
-- Time playing (months vs years)
-- Technical terminology usage
-- Types of challenges mentioned
-- Match play references
-- Specific shot discussions
-
-Respond with exactly one word: beginner, intermediate, or advanced"""
+Respond with exactly one word: Beginner, Intermediate, or Advanced"""
     
     try:
         response = claude_client.messages.create(
@@ -710,10 +703,10 @@ Respond with exactly one word: beginner, intermediate, or advanced"""
             messages=[{"role": "user", "content": assessment_prompt}]
         )
         
-        level = response.content[0].text.strip().lower()
-        return level if level in ["beginner", "intermediate", "advanced"] else "beginner"
+        level = response.content[0].text.strip()
+        return level if level in ["Beginner", "Intermediate", "Advanced"] else "Beginner"
     except:
-        return "beginner"
+        return "Beginner"
 
 def handle_introduction_sequence(user_message: str, claude_client):
     """
