@@ -620,54 +620,42 @@ def generate_personalized_welcome_message(player_name: str, session_number: int,
 # ENHANCED: Build conversational prompt with coaching history
 def build_conversational_prompt_with_history(user_question: str, context_chunks: list, conversation_history: list, coaching_history: list = None) -> str:
     """
-    Build Claude prompt including coaching history for better continuity
+    Build Claude prompt including coaching history for better continuity - ENHANCED VERSION
     """
     
-    # DEBUG LINE - shows in Streamlit as red error message
-    # st.error(f"DEBUG: Coaching history received: {len(coaching_history) if coaching_history else 0} sessions")
+    # Check if this is a new player in introduction sequence
+    is_intro = not st.session_state.get("intro_completed", True)
     
-    # Base coaching context
-    coaching_context = """You are an expert tennis coach with deep knowledge of technique, strategy, and mental game. 
-Your goal is to provide personalized, actionable advice that helps players improve systematically."""
-    
-    # Add coaching history if available
-    if coaching_history and len(coaching_history) > 0:
-        history_context = "\n\nPLAYER'S COACHING HISTORY:\n"
-        for i, session in enumerate(coaching_history[:2], 1):  # Last 2 sessions
-            history_context += f"\nSession {session.get('session_number', i)}:\n"
-            if session.get('technical_focus'):
-                history_context += f"- Technical focus: {session['technical_focus']}\n"
-            if session.get('homework_assigned'):
-                history_context += f"- Homework assigned: {session['homework_assigned']}\n"
-            if session.get('key_breakthroughs'):
-                history_context += f"- Breakthrough: {session['key_breakthroughs']}\n"
-        
-        coaching_context += history_context
-        coaching_context += "\nUse this history to provide continuity and reference previous work when relevant."
-    
-    # Build the full prompt - FIXED: using 'text' instead of 'content'
-    context_text = "\n\n".join([chunk.get('text', '') for chunk in context_chunks if chunk.get('text')])
-    
-    recent_conversation = ""
-    if conversation_history:
-        recent_messages = conversation_history[-6:]  # Last 3 exchanges
-        for msg in recent_messages:
-            role = "Player" if msg['role'] == 'user' else "Coach"
-            recent_conversation += f"{role}: {msg['content']}\n"
-    
-    full_prompt = f"""{coaching_context}
+    if is_intro:
+        # NEW PLAYER INTRODUCTION PROMPT
+        intro_prompt = """You are Coach TA, a professional tennis coach providing remote coaching through chat.
 
-RELEVANT TENNIS KNOWLEDGE:
+INTRODUCTION SEQUENCE (for new players only):
+- Start with: "Hi! I'm Coach TA, your personal tennis coach. What's your name?"
+- After getting name: "Nice to meet you, [Name]! I'm excited to help you improve your tennis game. Tell me about your tennis experience - how long have you been playing?"
+- Follow with: "What's your biggest challenge on court right now? What shots feel most comfortable to you?"
+- After gathering this information, transition smoothly to: "Great! What would you like to work on today?"
+- DO NOT mention or confirm any skill level assessment - this happens silently in the background
+
+CRITICAL: Keep ALL responses very short - maximum 2-3 sentences (phone screen length)
+Use encouraging, supportive tone with genuine curiosity
+"""
+        
+        # Build context for intro
+        context_text = "\n\n".join([chunk.get('text', '') for chunk in context_chunks if chunk.get('text')])
+        
+        return f"""{intro_prompt}
+
+Professional Coaching Resources:
 {context_text}
 
-RECENT CONVERSATION:
-{recent_conversation}
+Current Player Input: "{user_question}"
 
-CURRENT QUESTION: {user_question}
-
-Provide helpful, specific tennis coaching advice. Reference previous sessions naturally when relevant. Keep responses conversational and actionable."""
-
-    return full_prompt
+Respond as Coach TA with empathy and phone-screen length responses:"""
+    
+    else:
+        # REGULAR COACHING PROMPT
+        coaching_prompt = """You are Coach TA, a professional tennis coach providing remote coaching throu
 
 def extract_name_from_response(user_message: str) -> str:
     """
@@ -740,10 +728,13 @@ def handle_introduction_sequence(user_message: str, claude_client):
     Handle the introduction sequence for new players with invisible level assessment
     """
     intro_state = st.session_state.get("intro_state", "waiting_for_name")
+    st.error(f"DEBUG: Current intro_state: {intro_state}")
+    st.error(f"DEBUG: User message: {user_message}")
     
     if intro_state == "waiting_for_name":
         # Extract name from user response
         player_name = extract_name_from_response(user_message)
+        st.error(f"DEBUG: Extracted name: {player_name}")
         if player_name:
             st.session_state.collected_name = player_name
             st.session_state.intro_state = "collecting_experience"
@@ -755,14 +746,18 @@ def handle_introduction_sequence(user_message: str, claude_client):
     
     elif intro_state == "ready_for_assessment":
         # Now we have enough conversation to assess level
+        st.error("DEBUG: About to assess level...")
         assessed_level = assess_player_level_from_conversation(st.session_state.messages, claude_client)
+        st.error(f"DEBUG: Assessed level: {assessed_level}")
         
         # Update player record with collected name and assessed level
+        st.error(f"DEBUG: Updating player {st.session_state.player_record_id} with name: {st.session_state.collected_name}, level: {assessed_level}")
         success = update_player_info(
             st.session_state.player_record_id,
             st.session_state.collected_name,
             assessed_level
         )
+        st.error(f"DEBUG: Update success: {success}")
         
         if success:
             st.session_state.intro_completed = True
