@@ -631,29 +631,64 @@ def generate_personalized_welcome_message(player_name: str, session_number: int,
 
 # ENHANCED: Build conversational prompt with coaching history
 def build_conversational_prompt_with_history(user_question: str, context_chunks: list, conversation_history: list, coaching_history: list = None) -> str:
-    """Build Claude prompt including coaching history for better continuity"""
+    """Build Claude prompt - NATURAL CONVERSATIONAL STYLE"""
     
-    # Base coaching context
-    coaching_context = "You are Coach TA, a professional tennis coach. Keep responses very short (2-3 sentences max). Always ask questions before giving advice. Show empathy and be inquiry-based."
+    # Check if this is intro
+    is_intro = not st.session_state.get("intro_completed", True)
     
-    # Add coaching history if available
-    if coaching_history and len(coaching_history) > 0:
-        history_context = "\n\nPLAYER'S COACHING HISTORY:\n"
-        for i, session in enumerate(coaching_history[:2], 1):
-            history_context += f"\nSession {session.get('session_number', i)}:\n"
-            if session.get('technical_focus'):
-                history_context += f"- Technical focus: {session['technical_focus']}\n"
-            if session.get('homework_assigned'):
-                history_context += f"- Homework assigned: {session['homework_assigned']}\n"
-            if session.get('key_breakthroughs'):
-                history_context += f"- Breakthrough: {session['key_breakthroughs']}\n"
+    if is_intro:
+        # NEW PLAYER INTRODUCTION PROMPT
+        intro_prompt = """You are Coach TA. Be natural and conversational.
+
+INTRODUCTION FLOW:
+- Start: "Hi! I'm Coach TA, your personal tennis coach. What's your name?"
+- After name: "Nice to meet you, [Name]! I am excited, tell me about your tennis. You been playing long?"
+- After experience: "What's challenging you most on court right now?"
+- Then transition: "Great! How about we work on [specific area] today?"
+
+Keep responses SHORT (1-2 sentences max). Be enthusiastic but concise."""
         
-        coaching_context += history_context
+        context_text = "\n\n".join([chunk.get('text', '') for chunk in context_chunks if chunk.get('text')])
+        
+        return f"""{intro_prompt}
+
+Tennis Knowledge: {context_text}
+
+Player says: "{user_question}"
+
+Respond naturally as Coach TA:"""
     
-    # Build context
-    context_text = "\n\n".join([chunk.get('text', '') for chunk in context_chunks if chunk.get('text')])
-    
-    return f"{coaching_context}\n\nTennis Knowledge: {context_text}\n\nQuestion: {user_question}\n\nRespond as Coach TA with short, inquiry-based responses:"
+    else:
+        # REGULAR COACHING PROMPT
+        coaching_prompt = """You are Coach TA. Natural, conversational tennis coaching.
+
+COACHING STYLE:
+- Ask 1-2 quick questions about their specific situation
+- Then give ONE specific tip or drill
+- End with: "How about we try this?" or "Sound good?" or "Want to give that a shot?"
+- Keep responses SHORT (2-3 sentences total)
+- Be encouraging and practical
+- Focus on actionable advice they can practice alone
+
+NEVER say "Hi there" or greet again - you're already in conversation."""
+
+        # Add history context
+        history_text = ""
+        if coaching_history and len(coaching_history) > 0:
+            last_session = coaching_history[0]
+            if last_session.get('technical_focus'):
+                history_text = f"\nLast session you worked on: {last_session['technical_focus']}"
+
+        context_text = "\n\n".join([chunk.get('text', '') for chunk in context_chunks if chunk.get('text')])
+        
+        return f"""{coaching_prompt}
+{history_text}
+
+Tennis Knowledge: {context_text}
+
+Player says: "{user_question}"
+
+Give specific advice and suggest trying it:"""
 
 def extract_name_from_response(user_message: str) -> str:
     """
