@@ -155,7 +155,29 @@ def find_player_by_email(email: str):
     except Exception as e:
         return None
 
-def create_new_player(email: str, name: str = ""):
+def update_player_info(player_id: str, name: str = "", tennis_level: str = ""):
+    """Update existing player with name and tennis level collected during coaching"""
+    try:
+        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Players/{player_id}"
+        headers = {
+            "Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}",
+            "Content-Type": "application/json"
+        }
+        
+        # Prepare update data
+        update_data = {"fields": {}}
+        if name:
+            update_data["fields"]["name"] = name
+        if tennis_level:
+            update_data["fields"]["tennis_level"] = tennis_level
+        
+        response = requests.patch(url, headers=headers, json=update_data)
+        
+        return response.status_code == 200
+    except Exception as e:
+        return False
+
+def create_new_player(email: str, name: str = "", tennis_level: str = ""):
     try:
         url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Players"
         headers = {
@@ -163,17 +185,18 @@ def create_new_player(email: str, name: str = ""):
             "Content-Type": "application/json"
         }
         
-        # Use provided name, or extract from email, or leave empty for anonymous
+        # Use provided name, or extract from email, or leave empty for Coach TA collection
         if name:
             player_name = name
         else:
-            # Extract name from email as fallback
-            player_name = email.split('@')[0].replace('.', ' ').title()
+            # For new players, leave empty - Coach TA will collect it
+            player_name = ""
         
         data = {
             "fields": {
                 "email": email,
                 "name": player_name,
+                "tennis_level": tennis_level,  # NEW: Add tennis level field
                 "primary_goals": [],
                 "personality_notes": "",
                 "total_sessions": 1,
@@ -560,24 +583,14 @@ def generate_personalized_welcome_message(player_name: str, session_number: int,
     Generate a personalized welcome message based on coaching history
     """
     if not is_returning or not recent_summaries:
-        return f"""👋 Hi! This is your Coach TA. Welcome to your first session!
-
-I'm here to help you improve your tennis game. What shall we work on today?
-
-I can help with:
-• Technique (forehand, backhand, serve, volleys)
-• Strategy and tactics
-• Mental game and confidence
-• Match preparation
-• Any specific issues you're having on court
-
-What's your main focus today? 🎾"""
-
-    # Returning player with history
+        # NEW PLAYER - Coach TA introduction sequence
+        return "Hi! I'm Coach TA, your personal tennis coach. What's your name?"
+    
+    # RETURNING PLAYER with history
     last_session = recent_summaries[0]
     
     welcome_parts = [
-        f"👋 Hi! This is your Coach TA. Great to see you back, {player_name}!",
+        f"Hi {player_name}! Coach TA here. Great to see you back!",
         f"\n**This is session #{session_number}**"
     ]
     
@@ -595,7 +608,7 @@ What's your main focus today? 🎾"""
     if last_session.get('key_breakthroughs'):
         welcome_parts.append(f"\n⚡ **Last breakthrough:** {last_session['key_breakthroughs']}")
     
-    welcome_parts.append("\n\nReady to continue your tennis journey? What shall we work on today?")
+    welcome_parts.append("\n\nWhat would you like to work on today?")
     
     return "".join(welcome_parts)
 
@@ -651,9 +664,115 @@ Provide helpful, specific tennis coaching advice. Reference previous sessions na
 
     return full_prompt
 
+def extract_name_from_response(user_message: str) -> str:
+    """
+    Extract player name from their response to "What's your name?"
+    """
+    # Simple extraction - look for common patterns
+    message = user_message.strip()
+    
+    # Handle common responses
+    if message.lower().startswith(("i'm ", "im ", "i am ")):
+        return message.split(" ", 2)[2] if len(message.split()) > 2 else message.split(" ", 1)[1]
+    elif message.lower().startswith(("my name is ", "name is ")):
+        return message.split("is ", 1)[1]
+    elif message.lower().startswith(("call me ", "it's ", "its ")):
+        return message.split(" ", 1)[1]
+    else:
+        # Assume the whole message is the name (most common case)
+        return message.title()
+
+def assess_player_level_from_conversation(conversation_history: list, claude_client) -> str:
+    """
+    Use Claude to assess player's tennis level based on their responses during intro
+    """
+    # Extract just the player's responses from intro conversation
+    player_responses = []
+    for msg in conversation_history:
+        if msg["role"] == "user":
+            player_responses.append(msg["content"])
+    
+    if len(player_responses) < 2:  # Need at least name + some tennis discussion
+        return "beginner"  # Default fallback
+    
+    # Skip the name response, focus on tennis-related responses
+    tennis_responses = player_responses[1:]
+    
+    assessment_prompt = f"""
+    Analyze these player responses from a tennis coaching conversation and determine their skill level.
+    
+    Player responses about tennis: {' | '.join(tennis_responses)}
+    
+    Based on their language, experience mentions, technical understanding, and familiarity with tennis concepts, categorize them as:
+    - "beginner" - New to tennis, basic understanding, just learning fundamentals
+    - "intermediate" - Some experience, familiar with basics, working on consistency and technique
+    - "advanced" - Experienced player, technical knowledge, competitive play, advanced concepts
+    
+    Look for clues like:
+    - Time playing (months vs years)
+    - Technical terminology usage
+    - Types of challenges mentioned
+    - Match play references
+    - Specific shot discussions
+    
+    Respond with exactly one word: beginner, intermediate, or advanced
+    """
+    
+    try:
+        response = claude_client.messages.create(
+            model="claude-3-sonnet-20240229",
+            max_tokens=10,
+            messages=[{"role": "user", "content": assessment_prompt}]
+        )
+        
+        level = response.content[0].text.strip().lower()
+        return level if level in ["beginner", "intermediate", "advanced"] else "beginner"
+    except:
+        return "beginner"  # Fallback
+
+def handle_introduction_sequence(user_message: str, claude_client):
+    """
+    Handle the introduction sequence for new players with invisible level assessment
+    """
+    intro_state = st.session_state.get("intro_state", "waiting_for_name")
+    
+    if intro_state == "waiting_for_name":
+        # Extract name from user response
+        player_name = extract_name_from_response(user_message)
+        if player_name:
+            st.session_state.collected_name = player_name
+            st.session_state.intro_state = "collecting_experience"
+            return f"Nice to meet you, {player_name}! I'm excited to help you improve your tennis game. Tell me about your tennis experience - how long have you been playing?"
+    
+    elif intro_state == "collecting_experience":
+        st.session_state.intro_state = "ready_for_assessment"
+        return "What's your biggest challenge on court right now? What shots feel most comfortable to you?"
+    
+    elif intro_state == "ready_for_assessment":
+        # Now we have enough conversation to assess level
+        assessed_level = assess_player_level_from_conversation(st.session_state.messages, claude_client)
+        
+        # Update player record with collected name and assessed level
+        success = update_player_info(
+            st.session_state.player_record_id,
+            st.session_state.collected_name,
+            assessed_level
+        )
+        
+        if success:
+            st.session_state.intro_completed = True
+            st.session_state.intro_state = "complete"
+            return "Great! What would you like to work on today?"
+        else:
+            # Fallback - continue anyway
+            st.session_state.intro_completed = True
+            return "Perfect! What would you like to work on today?"
+    
+    return None
+
 def setup_player_session_with_continuity(player_email: str):
     """
-    Enhanced player setup with proper continuity system - CORRECTED VERSION
+    Enhanced player setup with proper continuity system - WITH COACH TA INTRO
     """
     existing_player = find_player_by_email(player_email)
     
@@ -668,7 +787,6 @@ def setup_player_session_with_continuity(player_email: str):
         # Load recent coaching history
         with st.spinner("Loading your coaching history..."):
             recent_summaries = get_player_recent_summaries(existing_player['id'], 2)
-            # st.error(f"DEBUG: Retrieved {len(recent_summaries)} summaries from Airtable for player {existing_player['id']}")
             st.session_state.coaching_history = recent_summaries
         
         # Generate welcome message for returning player
@@ -683,23 +801,29 @@ def setup_player_session_with_continuity(player_email: str):
         else:
             context_text = "\n\nWhat shall we work on today?"
         
-        welcome_msg = f"👋 Hi! This is your Coach TA. Great to see you back, {player_name}!\n\nThis is session #{session_number}{context_text}"
+        welcome_msg = f"Hi {player_name}! Coach TA here. Great to see you back!\n\nThis is session #{session_number}{context_text}"
         
         update_player_session_count(existing_player['id'])
         
     else:
-        # New player
-        new_player = create_new_player(player_email, st.session_state.get('player_name_input', ''))
+        # NEW PLAYER - Coach TA Introduction Sequence
+        new_player = create_new_player(player_email, "", "")  # Empty name and level initially
         if new_player:
             st.session_state.player_record_id = new_player['id']
             st.session_state.is_returning_player = False
             st.session_state.coaching_history = []
-            welcome_msg = f"👋 Hi! This is your Coach TA. Welcome to your first session!\n\nI'm here to help you improve your tennis game. What shall we work on today?\n\nI can help with technique, strategy, mental game, or any specific issues you're having on court."
+            
+            # NEW: Set introduction state
+            st.session_state.intro_state = "waiting_for_name"
+            st.session_state.intro_completed = False
+            
+            welcome_msg = "Hi! I'm Coach TA, your personal tennis coach. What's your name?"
         else:
             st.error("Error creating player profile. Please try again.")
             return None
     
     return welcome_msg
+
 def main():
     st.set_page_config(
         page_title="Tennis Coach AI",
@@ -739,19 +863,13 @@ def main():
                 placeholder="your.email@example.com",
                 help="Required for session continuity and progress tracking"
             )
-
-            player_name = st.text_input(
-                "Name (optional)", 
-                placeholder="What would you like the coach to call you?",
-                help="Leave blank if you prefer to stay anonymous"
-            )
+            
+            # REMOVED: player_name input field - Coach TA will collect this
             
             if st.form_submit_button("Start Coaching Session", type="primary"):
                 if not player_email or "@" not in player_email:
                     st.error("Please enter a valid email address.")
                 else:
-                    # Store the optional name in session state
-                    st.session_state.player_name_input = player_name.strip() if player_name else ""
                     with st.spinner("Setting up your coaching session..."):
                         welcome_msg = setup_player_session_with_continuity(player_email)
                         if not welcome_msg:
@@ -802,6 +920,32 @@ def main():
         with st.chat_message("user"):
             st.markdown(prompt)
         
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        
+        # NEW: Handle introduction sequence for new players
+        if not st.session_state.get("intro_completed", True):  # True for returning players
+            intro_response = handle_introduction_sequence(prompt, claude_client)
+            if intro_response:
+                with st.chat_message("assistant"):
+                    st.markdown(intro_response)
+                
+                st.session_state.message_counter += 1
+                st.session_state.messages.append({
+                    "role": "assistant", 
+                    "content": intro_response
+                })
+                
+                # Log to SSS Active_Sessions
+                if st.session_state.get("player_record_id"):
+                    log_message_to_sss(
+                        st.session_state.player_record_id,
+                        st.session_state.session_id,
+                        st.session_state.message_counter,
+                        "assistant",
+                        intro_response
+                    )
+                return  # Don't process as normal coaching message yet
+        
         # If session is ending, provide closing response and mark as completed
         if st.session_state.get("session_ending"):
             with st.chat_message("assistant"):
@@ -826,32 +970,20 @@ def main():
                 
                 # Mark session as completed
                 if st.session_state.get("player_record_id"):
-                    # st.error(f"DEBUG: About to mark session complete - Player: {st.session_state.player_record_id}")
                     session_marked = mark_session_completed(
                         st.session_state.player_record_id,
                         st.session_state.session_id
                     )
-                    # st.error(f"DEBUG: Session marked result: {session_marked}")
-                    if session_marked:
-                        # st.error("DEBUG: Entering summary generation block")
-                        pass
-                    else:
-                        # st.error("DEBUG: Session marked returned False - no summary generation")
-                        pass
                     if session_marked:
                         st.success("✅ Session marked as completed!")
                         
-                        
                         # Generate session summary
                         with st.spinner("🧠 Generating session summary..."):
-                            # st.error(f"DEBUG: player_record_id value = '{st.session_state.player_record_id}'")
-                            # st.error(f"DEBUG: About to process session - Player: {st.session_state.player_record_id}, Session: {st.session_state.session_id}")
                             summary_created = process_completed_session(
                                 st.session_state.player_record_id,
                                 st.session_state.session_id,
                                 claude_client
                             )
-                            # st.error(f"DEBUG: Summary result: {summary_created}")
                             if summary_created:
                                 st.success("📝 Session summary generated and saved!")
                             else:
