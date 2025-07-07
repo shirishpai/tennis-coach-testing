@@ -674,39 +674,32 @@ def extract_name_from_response(user_message: str) -> str:
         return message.title()
 
 def assess_player_level_from_conversation(conversation_history: list, claude_client) -> str:
-    # Use Claude to assess player's tennis level based on their responses during intro
+    # Extract player responses
     player_responses = []
     for msg in conversation_history:
         if msg["role"] == "user":
             player_responses.append(msg["content"])
     
     if len(player_responses) < 2:
-        return "Beginner"  # FIXED: Capital B
-    
-    tennis_responses = player_responses[1:]
-    
-    assessment_prompt = f"""Analyze these player responses and determine their skill level.
-
-Player responses: {' | '.join(tennis_responses)}
-
-Categorize as:
-- "Beginner" - New to tennis, basic understanding
-- "Intermediate" - Some experience, familiar with basics  
-- "Advanced" - Experienced player, technical knowledge
-
-Respond with exactly one word: Beginner, Intermediate, or Advanced"""
-    
-    try:
-        response = claude_client.messages.create(
-            model="claude-3-sonnet-20240229",
-            max_tokens=10,
-            messages=[{"role": "user", "content": assessment_prompt}]
-        )
-        
-        level = response.content[0].text.strip()
-        return level if level in ["Beginner", "Intermediate", "Advanced"] else "Beginner"
-    except:
         return "Beginner"
+    
+    # Combine all tennis-related responses
+    all_responses = " ".join(player_responses[1:]).lower()
+    
+    # Smart logic-based assessment
+    advanced_indicators = ["kick serve", "slice serve", "topspin", "years", "competitive", "tournament", "league", "advanced", "intermediate"]
+    intermediate_indicators = ["year", "months", "consistent", "working on", "improving", "regular"]
+    
+    # Check for advanced indicators
+    if any(indicator in all_responses for indicator in advanced_indicators):
+        return "Advanced"
+    
+    # Check for intermediate indicators  
+    if any(indicator in all_responses for indicator in intermediate_indicators):
+        return "Intermediate"
+    
+    # Default to beginner
+    return "Beginner"
 
 def handle_introduction_sequence(user_message: str, claude_client):
     """
