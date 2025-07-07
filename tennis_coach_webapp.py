@@ -751,8 +751,7 @@ def handle_introduction_sequence(user_message: str, claude_client):
         if player_name:
             st.session_state.collected_name = player_name
             st.session_state.intro_state = "collecting_experience"
-            return f"Nice to meet you, {player_name}! I'm excited to help you improve your tennis game. Tell me about your tennis experience - how long have you been playing?"
-    
+            return f"Nice to meet you, {player_name}! I am excited, tell me about your tennis. You been playing long?"    
     elif intro_state == "collecting_experience":
         st.session_state.intro_state = "ready_for_assessment"
         return "What's your biggest challenge on court right now? What shots feel most comfortable to you?"
