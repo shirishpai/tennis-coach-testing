@@ -541,42 +541,53 @@ def log_message_to_sss(player_record_id: str, session_id: str, message_order: in
 
 def get_player_recent_summaries(player_record_id: str, limit: int = 3) -> list:
     """
-    Get recent summaries for a specific player - FIXED VERSION
+    Get recent summaries for a specific player - ORIGINAL WITH PLAYER FILTERING
     """
     try:
-        # Get summaries with player filter
-        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Session_Summaries"
+        # First, get the player's email to match summaries
+        player_url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Players/{player_record_id}"
         headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
         
-        # Filter by player_id directly using Airtable formula
+        player_response = requests.get(player_url, headers=headers)
+        if player_response.status_code != 200:
+            return []
+            
+        player_email = player_response.json().get('fields', {}).get('email', '')
+        
+        # Get all summaries and find ones for this email
+        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Session_Summaries"
         params = {
-            "filterByFormula": f"{{player_id}} = '{player_record_id}'",
             "sort[0][field]": "session_number", 
             "sort[0][direction]": "desc",
-            "maxRecords": limit
+            "maxRecords": 50  # Get more to search through
         }
         
         response = requests.get(url, headers=headers, params=params)
         if response.status_code == 200:
-            records = response.json().get('records', [])
+            all_records = response.json().get('records', [])
             
+            # Match summaries by checking if player_id links to our player
             matching_summaries = []
-            for record in records:
+            for record in all_records:
                 fields = record.get('fields', {})
-                # Skip if no technical_focus (empty summary)
-                if not fields.get('technical_focus'):
-                    continue
-                    
-                matching_summaries.append({
-                    'session_number': fields.get('session_number', 0),
-                    'technical_focus': fields.get('technical_focus', ''),
-                    'homework_assigned': fields.get('homework_assigned', ''),
-                    'next_session_focus': fields.get('next_session_focus', ''),
-                    'key_breakthroughs': fields.get('key_breakthroughs', ''),
-                    'condensed_summary': fields.get('condensed_summary', '')
-                })
+                
+                # NEW: Actually check if this summary belongs to our player
+                player_ids = fields.get('player_id', [])
+                if isinstance(player_ids, list) and player_record_id in player_ids:
+                    # Skip if no technical_focus (empty summary)
+                    if not fields.get('technical_focus'):
+                        continue
+                        
+                    matching_summaries.append({
+                        'session_number': fields.get('session_number', 0),
+                        'technical_focus': fields.get('technical_focus', ''),
+                        'homework_assigned': fields.get('homework_assigned', ''),
+                        'next_session_focus': fields.get('next_session_focus', ''),
+                        'key_breakthroughs': fields.get('key_breakthroughs', ''),
+                        'condensed_summary': fields.get('condensed_summary', '')
+                    })
             
-            return matching_summaries
+            return matching_summaries[:limit]
         return []
     except Exception as e:
         return []
