@@ -808,6 +808,20 @@ def setup_player_session_with_continuity(player_email: str):
         new_player = create_new_player(player_email, "", "")  # Empty name and level initially
         
         if new_player:
+            st.session_state.player_record_id = new_player['id']
+            st.session_state.is_returning_player = False
+            st.session_state.coaching_history = []
+            
+            # Set introduction state
+            st.session_state.intro_state = "waiting_for_name"
+            st.session_state.intro_completed = False
+            
+            welcome_msg = "Hi! I'm Coach TA, your personal tennis coach. What's your name?"
+        else:
+            st.error("Error creating player profile. Please try again.")
+            return None
+    
+    return welcome_msg
 
 def main():
     st.set_page_config(
