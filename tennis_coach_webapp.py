@@ -676,9 +676,7 @@ def extract_name_from_response(user_message: str) -> str:
         return message.title()
 
 def assess_player_level_from_conversation(conversation_history: list, claude_client) -> str:
-    """
-    Use Claude to assess player's tennis level based on their responses during intro
-    """
+    """Use Claude to assess player's tennis level based on their responses during intro"""
     # Extract just the player's responses from intro conversation
     player_responses = []
     for msg in conversation_history:
@@ -691,25 +689,23 @@ def assess_player_level_from_conversation(conversation_history: list, claude_cli
     # Skip the name response, focus on tennis-related responses
     tennis_responses = player_responses[1:]
     
-    assessment_prompt = f"""
-    Analyze these player responses from a tennis coaching conversation and determine their skill level.
-    
-    Player responses about tennis: {' | '.join(tennis_responses)}
-    
-    Based on their language, experience mentions, technical understanding, and familiarity with tennis concepts, categorize them as:
-    - "beginner" - New to tennis, basic understanding, just learning fundamentals
-    - "intermediate" - Some experience, familiar with basics, working on consistency and technique
-    - "advanced" - Experienced player, technical knowledge, competitive play, advanced concepts
-    
-    Look for clues like:
-    - Time playing (months vs years)
-    - Technical terminology usage
-    - Types of challenges mentioned
-    - Match play references
-    - Specific shot discussions
-    
-    Respond with exactly one word: beginner, intermediate, or advanced
-    """
+    assessment_prompt = f"""Analyze these player responses from a tennis coaching conversation and determine their skill level.
+
+Player responses about tennis: {' | '.join(tennis_responses)}
+
+Based on their language, experience mentions, technical understanding, and familiarity with tennis concepts, categorize them as:
+- "beginner" - New to tennis, basic understanding, just learning fundamentals
+- "intermediate" - Some experience, familiar with basics, working on consistency and technique
+- "advanced" - Experienced player, technical knowledge, competitive play, advanced concepts
+
+Look for clues like:
+- Time playing (months vs years)
+- Technical terminology usage
+- Types of challenges mentioned
+- Match play references
+- Specific shot discussions
+
+Respond with exactly one word: beginner, intermediate, or advanced"""
     
     try:
         response = claude_client.messages.create(
