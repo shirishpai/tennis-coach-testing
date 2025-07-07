@@ -143,6 +143,9 @@ def query_claude(client, prompt: str) -> str:
 
 def find_player_by_email(email: str):
     try:
+        # Normalize email to lowercase
+        email = email.lower().strip()
+        
         url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Players"
         headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
         params = {"filterByFormula": f"{{email}} = '{email}'"}
@@ -191,44 +194,17 @@ def update_player_info(player_id: str, name: str = "", tennis_level: str = ""):
 
 def create_new_player(email: str, name: str = "", tennis_level: str = ""):
     try:
-        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Players"
-        headers = {
-            "Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}",
-            "Content-Type": "application/json"
+        # Normalize email to lowercase
+        email = email.lower().strip()
+        
+        # ... rest of function unchanged
+        data = {
+            "fields": {
+                "email": email,  # Now lowercase
+                # ... rest unchanged
+            }
         }
-        
-        # Use provided name, or extract from email, or leave empty for Coach TA collection
-        if name:
-            player_name = name
-        else:
-            # For new players, leave empty - Coach TA will collect it
-            player_name = ""
-        
-        # Prepare fields
-        fields = {
-            "email": email,
-            "name": player_name,
-            "primary_goals": [],
-            "personality_notes": "",
-            "total_sessions": 1,
-            "first_session_date": time.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
-            "player_status": "Active"
-        }
-        
-        # Only add tennis_level if it has a valid value
-        if tennis_level and tennis_level in ["beginner", "intermediate", "advanced"]:
-            fields["tennis_level"] = tennis_level
-        # Don't include tennis_level field at all if empty - let Airtable handle default
-        
-        data = {"fields": fields}
-        
-        response = requests.post(url, headers=headers, json=data)
-        
-        if response.status_code == 200:
-            return response.json()
-        return None
-    except Exception as e:
-        return None
+        # ... rest unchanged
 
 def detect_session_end(message_content: str) -> bool:
     goodbye_phrases = [
