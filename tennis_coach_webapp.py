@@ -174,7 +174,7 @@ def update_player_info(player_id: str, name: str = "", tennis_level: str = ""):
         if tennis_level:
             update_data["fields"]["tennis_level"] = tennis_level
         
-        response = requests.patch(url, headers=headers, json=update_data)
+        response = requests.patch(url, headers=headers, json=data)
         
         return response.status_code == 200
     except Exception as e:
@@ -792,12 +792,7 @@ def setup_player_session_with_continuity(player_email: str):
             recent_summaries = get_player_recent_summaries(existing_player['id'], 2)
             st.session_state.coaching_history = recent_summaries
         
-        st.write(f"🔍 PLAYER ID: {existing_player['id']}")
-        st.write(f"🔍 SUMMARIES RETURNED: {len(recent_summaries)} items")
-        st.write(f"🔍 SUMMARIES CONTENT: {recent_summaries}")
-        
         if recent_summaries:
-            st.error("DEBUG: Using history display")
             last_session = recent_summaries[0]
             context_text = f"\n\nLast session we worked on: {last_session.get('technical_focus', 'technique practice')}"
             if last_session.get('homework_assigned'):
@@ -806,7 +801,6 @@ def setup_player_session_with_continuity(player_email: str):
                 context_text += f"\n\nToday I'd like to focus on: {last_session.get('next_session_focus', '')}"
             context_text += "\n\nHow did that practice go? Ready to continue?"
         else:
-            st.error("DEBUG: No history - using generic message")
             context_text = "\n\nWhat shall we work on today?"
         
         welcome_msg = f"Hi {player_name}! Coach TA here. Great to see you back!\n\nThis is session #{session_number}{context_text}"
