@@ -205,12 +205,20 @@ def create_new_player(email: str, name: str = "", tennis_level: str = ""):
             }
         }
         
+        # DEBUG: Show what we're sending
+        st.error(f"DEBUG: Sending data: {data}")
+        
         response = requests.post(url, headers=headers, json=data)
+        
+        # DEBUG: Show response
+        st.error(f"DEBUG: Response status: {response.status_code}")
+        st.error(f"DEBUG: Response content: {response.text}")
         
         if response.status_code == 200:
             return response.json()
         return None
     except Exception as e:
+        st.error(f"DEBUG: Exception occurred: {str(e)}")
         return None
 
 def detect_session_end(message_content: str) -> bool:
@@ -774,22 +782,23 @@ def setup_player_session_with_continuity(player_email: str):
     """
     Enhanced player setup with proper continuity system - WITH COACH TA INTRO
     """
+    st.error(f"DEBUG: Starting setup for email: {player_email}")
+    
     existing_player = find_player_by_email(player_email)
+    st.error(f"DEBUG: Existing player result: {existing_player}")
     
     if existing_player:
-        # Returning player
+        # Returning player - EXISTING CODE
         player_data = existing_player['fields']
         st.session_state.player_record_id = existing_player['id']
         st.session_state.is_returning_player = True
         player_name = player_data.get('name', 'there')
         session_number = player_data.get('total_sessions', 0) + 1
         
-        # Load recent coaching history
         with st.spinner("Loading your coaching history..."):
             recent_summaries = get_player_recent_summaries(existing_player['id'], 2)
             st.session_state.coaching_history = recent_summaries
         
-        # Generate welcome message for returning player
         if recent_summaries:
             last_session = recent_summaries[0]
             context_text = f"\n\nLast session we worked on: {last_session.get('technical_focus', 'technique practice')}"
@@ -806,8 +815,12 @@ def setup_player_session_with_continuity(player_email: str):
         update_player_session_count(existing_player['id'])
         
     else:
-        # NEW PLAYER - Coach TA Introduction Sequence
+        # NEW PLAYER - Debug this part
+        st.error("DEBUG: Creating new player...")
+        
         new_player = create_new_player(player_email, "", "")  # Empty name and level initially
+        st.error(f"DEBUG: New player result: {new_player}")
+        
         if new_player:
             st.session_state.player_record_id = new_player['id']
             st.session_state.is_returning_player = False
@@ -822,6 +835,7 @@ def setup_player_session_with_continuity(player_email: str):
             st.error("Error creating player profile. Please try again.")
             return None
     
+    st.error(f"DEBUG: Returning welcome message: {welcome_msg}")
     return welcome_msg
 
 def main():
