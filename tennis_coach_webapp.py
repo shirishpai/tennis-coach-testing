@@ -781,11 +781,9 @@ def setup_player_session_with_continuity(player_email: str):
             recent_summaries = get_player_recent_summaries(existing_player['id'], 2)
             st.session_state.coaching_history = recent_summaries
         
-        # Persistent debug that survives reruns
-        if 'debug_summaries' not in st.session_state:
-            st.session_state.debug_summaries = f"Count: {len(recent_summaries)}, Content: {recent_summaries}"
-        
-        st.write(f"🔍 DEBUG PERSISTENT: {st.session_state.debug_summaries}")
+        st.write(f"🔍 PLAYER ID: {existing_player['id']}")
+        st.write(f"🔍 SUMMARIES RETURNED: {len(recent_summaries)} items")
+        st.write(f"🔍 SUMMARIES CONTENT: {recent_summaries}")
         
         if recent_summaries:
             st.error("DEBUG: Using history display")
