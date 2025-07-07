@@ -538,36 +538,30 @@ def log_message_to_sss(player_record_id: str, session_id: str, message_order: in
         
     except Exception as e:
         return False
+
 def get_player_recent_summaries(player_record_id: str, limit: int = 3) -> list:
     """
-    Get recent summaries for a specific player - SIMPLIFIED VERSION
+    Get recent summaries for a specific player - FIXED VERSION
     """
     try:
-        # First, get the player's email to match summaries
-        player_url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Players/{player_record_id}"
+        # Get summaries with player filter
+        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Session_Summaries"
         headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
         
-        player_response = requests.get(player_url, headers=headers)
-        if player_response.status_code != 200:
-            return []
-            
-        player_email = player_response.json().get('fields', {}).get('email', '')
-        
-        # Get all summaries and find ones for this email
-        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Session_Summaries"
+        # Filter by player_id directly using Airtable formula
         params = {
+            "filterByFormula": f"{{player_id}} = '{player_record_id}'",
             "sort[0][field]": "session_number", 
             "sort[0][direction]": "desc",
-            "maxRecords": 50  # Get more to search through
+            "maxRecords": limit
         }
         
         response = requests.get(url, headers=headers, params=params)
         if response.status_code == 200:
-            all_records = response.json().get('records', [])
+            records = response.json().get('records', [])
             
-            # Match summaries by checking if player_id links to our email
             matching_summaries = []
-            for record in all_records:
+            for record in records:
                 fields = record.get('fields', {})
                 # Skip if no technical_focus (empty summary)
                 if not fields.get('technical_focus'):
@@ -582,10 +576,9 @@ def get_player_recent_summaries(player_record_id: str, limit: int = 3) -> list:
                     'condensed_summary': fields.get('condensed_summary', '')
                 })
             
-            return matching_summaries[:limit]
+            return matching_summaries
         return []
     except Exception as e:
-        # st.error(f"Error getting summaries: {str(e)}")
         return []
 
 # ENHANCED: Welcome message generation with better context
