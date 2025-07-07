@@ -619,43 +619,29 @@ def generate_personalized_welcome_message(player_name: str, session_number: int,
 
 # ENHANCED: Build conversational prompt with coaching history
 def build_conversational_prompt_with_history(user_question: str, context_chunks: list, conversation_history: list, coaching_history: list = None) -> str:
-    """
-    Build Claude prompt including coaching history for better continuity - ENHANCED VERSION
-    """
+    """Build Claude prompt including coaching history for better continuity"""
     
-    # Check if this is a new player in introduction sequence
-    is_intro = not st.session_state.get("intro_completed", True)
+    # Base coaching context
+    coaching_context = "You are Coach TA, a professional tennis coach. Keep responses very short (2-3 sentences max). Always ask questions before giving advice. Show empathy and be inquiry-based."
     
-    if is_intro:
-        # NEW PLAYER INTRODUCTION PROMPT
-        intro_prompt = """You are Coach TA, a professional tennis coach providing remote coaching through chat.
-
-INTRODUCTION SEQUENCE (for new players only):
-- Start with: "Hi! I'm Coach TA, your personal tennis coach. What's your name?"
-- After getting name: "Nice to meet you, [Name]! I'm excited to help you improve your tennis game. Tell me about your tennis experience - how long have you been playing?"
-- Follow with: "What's your biggest challenge on court right now? What shots feel most comfortable to you?"
-- After gathering this information, transition smoothly to: "Great! What would you like to work on today?"
-- DO NOT mention or confirm any skill level assessment - this happens silently in the background
-
-CRITICAL: Keep ALL responses very short - maximum 2-3 sentences (phone screen length)
-Use encouraging, supportive tone with genuine curiosity
-"""
+    # Add coaching history if available
+    if coaching_history and len(coaching_history) > 0:
+        history_context = "\n\nPLAYER'S COACHING HISTORY:\n"
+        for i, session in enumerate(coaching_history[:2], 1):
+            history_context += f"\nSession {session.get('session_number', i)}:\n"
+            if session.get('technical_focus'):
+                history_context += f"- Technical focus: {session['technical_focus']}\n"
+            if session.get('homework_assigned'):
+                history_context += f"- Homework assigned: {session['homework_assigned']}\n"
+            if session.get('key_breakthroughs'):
+                history_context += f"- Breakthrough: {session['key_breakthroughs']}\n"
         
-        # Build context for intro
-        context_text = "\n\n".join([chunk.get('text', '') for chunk in context_chunks if chunk.get('text')])
-        
-        return f"""{intro_prompt}
-
-Professional Coaching Resources:
-{context_text}
-
-Current Player Input: "{user_question}"
-
-Respond as Coach TA with empathy and phone-screen length responses:"""
+        coaching_context += history_context
     
-    else:
-        # REGULAR COACHING PROMPT
-        coaching_prompt = """You are Coach TA, a professional tennis coach providing remote coaching throu
+    # Build context
+    context_text = "\n\n".join([chunk.get('text', '') for chunk in context_chunks if chunk.get('text')])
+    
+    return f"{coaching_context}\n\nTennis Knowledge: {context_text}\n\nQuestion: {user_question}\n\nRespond as Coach TA with short, inquiry-based responses:"
 
 def extract_name_from_response(user_message: str) -> str:
     """
