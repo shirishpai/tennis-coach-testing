@@ -3,3 +3,4 @@ pinecone
 openai
 anthropic
 requests
+pandas
