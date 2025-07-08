@@ -225,26 +225,80 @@ def create_new_player(email: str, name: str = "", tennis_level: str = ""):
     except Exception as e:
         return None
 
-def detect_session_end(message_content: str) -> bool:
-    goodbye_phrases = [
-        "thanks", "thank you", "bye", "goodbye", "see you", "done", 
-        "that's all", "finished", "end session", "stop", "quit",
-        "done for today", "good session", "catch you later", "later",
-        "gotta go", "have to go", "thanks coach", "thank you coach"
-    ]
-    
+def detect_session_end(message_content: str, conversation_history: list = None) -> dict:
+    """
+    Intelligent session end detection with context awareness
+    Returns: {'should_end': bool, 'confidence': str, 'needs_confirmation': bool}
+    """
     message_lower = message_content.lower().strip()
     
-    for phrase in goodbye_phrases:
+    # DEFINITIVE ending phrases (high confidence)
+    definitive_endings = [
+        "end session", "stop session", "finish session", "done for today",
+        "that's all for today", "see you next time", "until next time",
+        "goodbye coach", "bye coach", "thanks coach, bye", "session over"
+    ]
+    
+    # LIKELY ending phrases (need confirmation)
+    likely_endings = [
+        "thanks coach", "thank you coach", "great session", "good session",
+        "that's helpful", "i'll practice that", "got it, thanks", "perfect, thanks"
+    ]
+    
+    # AMBIGUOUS words (only if conversation is winding down)
+    ambiguous_endings = ["thanks", "thank you", "bye", "done", "great", "perfect"]
+    
+    # Check definitive endings
+    for phrase in definitive_endings:
         if phrase in message_lower:
-            return True
+            return {'should_end': True, 'confidence': 'high', 'needs_confirmation': False}
     
-    if len(message_lower.split()) <= 3:
-        ending_words = ["thanks", "bye", "done", "good", "great"]
-        if any(word in message_lower for word in ending_words):
-            return True
+    # Check likely endings (coaching-specific)
+    for phrase in likely_endings:
+        if phrase in message_lower:
+            return {'should_end': True, 'confidence': 'medium', 'needs_confirmation': True}
     
-    return False
+    # Check ambiguous endings with context
+    if any(word in message_lower for word in ambiguous_endings):
+        # Only trigger if message is short AND seems conclusive
+        word_count = len(message_lower.split())
+        if word_count <= 3:
+            # Check conversation context for winding down signals
+            if conversation_history and len(conversation_history) >= 4:
+                recent_messages = [msg['content'].lower() for msg in conversation_history[-4:] if msg['role'] == 'user']
+                
+                # Look for patterns suggesting session is ending
+                coaching_complete_signals = [
+                    "got it", "understand", "will practice", "makes sense", 
+                    "clear", "helpful", "that helps", "i see"
+                ]
+                
+                has_completion_signals = any(
+                    any(signal in msg for signal in coaching_complete_signals) 
+                    for msg in recent_messages
+                )
+                
+                if has_completion_signals:
+                    return {'should_end': True, 'confidence': 'low', 'needs_confirmation': True}
+    
+    # NOT an ending
+    return {'should_end': False, 'confidence': 'none', 'needs_confirmation': False}
+
+def generate_session_end_confirmation(user_message: str, confidence: str) -> str:
+    """Generate appropriate confirmation message based on confidence level"""
+    
+    if confidence == 'medium':
+        return ("Sounds like you're ready to wrap up! Should we end today's session? "
+                "I'll save everything we covered and you can always come back for more coaching. "
+                "Just say 'yes' to finish or keep asking questions! 🎾")
+    
+    elif confidence == 'low':
+        return ("Are we finishing up for today? If you'd like to end the session, just say 'yes' "
+                "and I'll save our progress. Or feel free to ask me anything else! 🎾")
+    
+    else:
+        return ("Ready to finish today's coaching? Say 'yes' to end the session or "
+                "keep the conversation going! 🎾")
 
 def update_player_session_count(player_record_id: str):
     try:
@@ -952,8 +1006,24 @@ def main():
             st.markdown(message["content"])
     
     if prompt := st.chat_input("Ask your tennis coach..."):
-        if detect_session_end(prompt):
+        # Smart session end detection
+        end_result = detect_session_end(prompt, st.session_state.messages)
+        
+        if end_result['should_end']:
+            if end_result['needs_confirmation']:
+                # Set confirmation state instead of ending immediately
+                st.session_state.pending_session_end = True
+                st.session_state.end_confidence = end_result['confidence']
+            else:
+                # High confidence - end immediately
+                st.session_state.session_ending = True
+        
+        # Handle confirmation responses
+        if st.session_state.get("pending_session_end") and prompt.lower().strip() in ["yes", "y", "yeah", "yep", "sure"]:
             st.session_state.session_ending = True
+            st.session_state.pending_session_end = False
+        elif st.session_state.get("pending_session_end") and prompt.lower().strip() in ["no", "n", "nope", "not yet", "continue"]:
+            st.session_state.pending_session_end = False
         
         st.session_state.message_counter += 1
         
@@ -995,6 +1065,31 @@ def main():
                         intro_response
                     )
                 return  # Don't process as normal coaching message yet
+        
+        # Handle session end confirmation
+        if st.session_state.get("pending_session_end"):
+            confidence = st.session_state.get("end_confidence", "medium")
+            confirmation_msg = generate_session_end_confirmation(prompt, confidence)
+            
+            with st.chat_message("assistant"):
+                st.markdown(confirmation_msg)
+            
+            st.session_state.message_counter += 1
+            st.session_state.messages.append({
+                "role": "assistant", 
+                "content": confirmation_msg
+            })
+            
+            # Log confirmation message
+            if st.session_state.get("player_record_id"):
+                log_message_to_sss(
+                    st.session_state.player_record_id,
+                    st.session_state.session_id,
+                    st.session_state.message_counter,
+                    "assistant",
+                    confirmation_msg
+                )
+            return
         
         # If session is ending, provide closing response and mark as completed
         if st.session_state.get("session_ending"):
