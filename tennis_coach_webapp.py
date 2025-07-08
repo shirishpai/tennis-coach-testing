@@ -1009,6 +1009,123 @@ def generate_dynamic_session_ending(conversation_history: list, player_name: str
     
     return f"{effort} {learning} {motivation}"
 
+# Add these functions RIGHT BEFORE your main() function
+
+def get_all_coaching_sessions():
+    """Fetch all coaching sessions for admin dropdown"""
+    try:
+        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
+        headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
+        params = {
+            "sort[0][field]": "timestamp",
+            "sort[0][direction]": "desc",
+            "maxRecords": 100
+        }
+        
+        response = requests.get(url, headers=headers, params=params)
+        if response.status_code != 200:
+            return []
+        
+        records = response.json().get('records', [])
+        
+        # Group by session_id
+        sessions = {}
+        for record in records:
+            fields = record.get('fields', {})
+            session_id = fields.get('session_id')
+            
+            if session_id:
+                if session_id not in sessions:
+                    sessions[session_id] = {
+                        'session_id': session_id,
+                        'message_count': 0,
+                        'timestamp': fields.get('timestamp', ''),
+                        'status': fields.get('session_status', 'unknown')
+                    }
+                sessions[session_id]['message_count'] += 1
+        
+        return list(sessions.values())
+        
+    except Exception as e:
+        st.error(f"Error fetching sessions: {e}")
+        return []
+
+def get_conversation_messages(session_id: int):
+    """Fetch all messages for a specific session"""
+    try:
+        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
+        headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
+        params = {
+            "filterByFormula": f"{{session_id}} = {session_id}",
+            "sort[0][field]": "message_order",
+            "sort[0][direction]": "asc"
+        }
+        
+        response = requests.get(url, headers=headers, params=params)
+        if response.status_code == 200:
+            records = response.json().get('records', [])
+            messages = []
+            
+            for record in records:
+                fields = record.get('fields', {})
+                messages.append({
+                    'role': fields.get('role', ''),
+                    'content': fields.get('message_content', ''),
+                    'order': fields.get('message_order', 0)
+                })
+            
+            return messages
+        return []
+    except Exception as e:
+        st.error(f"Error fetching conversation: {e}")
+        return []
+
+def display_admin_interface():
+    """Simple admin interface display"""
+    st.title("🔧 Tennis Coach AI - Admin Interface")
+    st.markdown("### Session Management")
+    st.markdown("---")
+    
+    # Get sessions
+    sessions = get_all_coaching_sessions()
+    
+    if not sessions:
+        st.warning("No coaching sessions found.")
+        st.markdown("---")
+        if st.button("🏃‍♂️ Exit Admin Mode", type="primary"):
+            st.session_state.admin_mode = False
+            st.rerun()
+        return
+    
+    # Simple session list
+    st.markdown(f"**Found {len(sessions)} coaching sessions:**")
+    
+    for i, session in enumerate(sessions[:10]):  # Show first 10
+        with st.expander(f"Session {session['session_id']} - {session['message_count']} messages"):
+            st.write(f"**Session ID:** {session['session_id']}")
+            st.write(f"**Messages:** {session['message_count']}")
+            st.write(f"**Status:** {session['status']}")
+            
+            if st.button(f"View Conversation", key=f"view_{i}"):
+                # Get messages for this session
+                messages = get_conversation_messages(session['session_id'])
+                
+                if messages:
+                    st.markdown("#### 💬 Conversation:")
+                    for msg in messages:
+                        role_emoji = "🧑‍🎓" if msg['role'] == 'player' else "🎾"
+                        role_name = "Player" if msg['role'] == 'player' else "Coach"
+                        st.markdown(f"**{role_emoji} {role_name}:** {msg['content']}")
+                        st.markdown("---")
+                else:
+                    st.warning("No messages found for this session.")
+    
+    # Exit admin mode
+    st.markdown("---")
+    if st.button("🏃‍♂️ Exit Admin Mode", type="primary"):
+        st.session_state.admin_mode = False
+        st.rerun()
+
 def main():
     st.set_page_config(
         page_title="Tennis Coach AI",
@@ -1016,6 +1133,11 @@ def main():
         layout="centered",
         initial_sidebar_state="collapsed"
     )
+    
+    # CHECK FOR ADMIN MODE FIRST
+    if st.session_state.get('admin_mode', False):
+        display_admin_interface()
+        return
     
     st.title("🎾 Tennis Coach AI")
     st.markdown("*Your personal tennis coaching assistant*")
@@ -1089,10 +1211,10 @@ def main():
             st.markdown(message["content"])
     
     if prompt := st.chat_input("Ask your tennis coach..."):
-        # SIMPLE ADMIN TEST - NO FUNCTIONS YET
+        # ADMIN MODE TRIGGER
         if prompt.strip().lower() == "hilly spike":
-            st.success("🔧 Admin mode trigger detected! (Interface coming soon...)")
-            st.write("Your app is working and admin trigger is functional")
+            st.session_state.admin_mode = True
+            st.rerun()
             return
         
         # Smart session end detection
