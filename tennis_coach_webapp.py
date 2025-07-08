@@ -1094,9 +1094,7 @@ def main():
             st.success("🔧 Admin mode trigger detected! (Interface coming soon...)")
             st.write("Your app is working and admin trigger is functional")
             return
-    
-    # Your existing chat processing continues here...
-    end_result = detect_session_end(prompt, st.session_state.messages)
+        
         # Smart session end detection
         end_result = detect_session_end(prompt, st.session_state.messages)
         
