@@ -15,6 +15,8 @@ except ImportError as e:
     st.error(f"Missing package: {e}")
     st.stop()
 
+st.write("🔵 DEBUG: File loaded, checking functions...")
+
 @st.cache_resource
 def setup_connections():
     try:
