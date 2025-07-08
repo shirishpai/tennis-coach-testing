@@ -878,24 +878,31 @@ st.write("🟢 DEBUG: get_current_player_info defined successfully")
 def main():
     st.write("🟢 DEBUG: App loaded successfully!")
     
+    st.write("🔴 DEBUG: About to set page config")
     st.set_page_config(
         page_title="Tennis Coach AI",
         page_icon="🎾",
         layout="centered",
         initial_sidebar_state="collapsed"
     )
+    st.write("🔴 DEBUG: Page config set")
     
+    st.write("🔴 DEBUG: About to show title")
     st.title("🎾 Tennis Coach AI")
     st.markdown("*Your personal tennis coaching assistant*")
     st.markdown("---")
+    st.write("🔴 DEBUG: Title shown")
     
+    st.write("🔴 DEBUG: About to setup connections")
     with st.spinner("Connecting to tennis coaching database..."):
         index, claude_client = setup_connections()
+    st.write("🔴 DEBUG: Connections setup complete")
     
     if not index or not claude_client:
         st.error("Failed to connect to coaching systems. Please check API keys.")
         st.stop()
     
+    st.write("🔴 DEBUG: About to setup sidebar")
     with st.sidebar:
         st.header("🔧 Admin Controls")
         top_k = st.slider("Coaching resources", 1, 8, 3)
@@ -905,8 +912,11 @@ def main():
             st.session_state.conversation_log = []
             st.session_state.player_setup_complete = False
             st.rerun()
+    st.write("🔴 DEBUG: Sidebar setup complete")
     
+    st.write("🔴 DEBUG: About to check player setup")
     if not st.session_state.get("player_setup_complete"):
+        st.write("🔴 DEBUG: Player setup not complete, showing form")
         with st.form("player_setup"):
             st.markdown("### 🎾 Welcome to Tennis Coach AI")
             st.markdown("**Quick setup:**")
@@ -950,10 +960,12 @@ def main():
                         st.rerun()
         return
     
+    st.write("🔴 DEBUG: Player setup complete, showing messages")
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
     
+    st.write("🔴 DEBUG: About to setup chat input")
     if prompt := st.chat_input("Ask your tennis coach..."):
         if detect_session_end(prompt):
             st.session_state.session_ending = True
