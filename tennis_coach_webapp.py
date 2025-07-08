@@ -174,7 +174,7 @@ def update_player_info(player_id: str, name: str = "", tennis_level: str = ""):
         if tennis_level:
             update_data["fields"]["tennis_level"] = tennis_level
         
-        response = requests.patch(url, headers=headers, json=data)
+        response = requests.patch(url, headers=headers, json=update_data)
         
         return response.status_code == 200
     except Exception as e:
@@ -628,8 +628,8 @@ def generate_personalized_welcome_message(player_name: str, session_number: int,
     return "".join(welcome_parts)
 
 # ENHANCED: Build conversational prompt with coaching history
-def build_conversational_prompt_with_history(user_question: str, context_chunks: list, conversation_history: list, coaching_history: list = None) -> str:
-    """Build Claude prompt - NATURAL CONVERSATIONAL STYLE"""
+def build_conversational_prompt_with_history(user_question: str, context_chunks: list, conversation_history: list, coaching_history: list = None, player_name: str = None, player_level: str = None) -> str:
+    """Build Claude prompt with proper player context and memory"""
     
     # Check if this is intro
     is_intro = not st.session_state.get("intro_completed", True)
@@ -646,9 +646,18 @@ INTRODUCTION FLOW:
 
 Keep responses SHORT (1-2 sentences max). Be enthusiastic but concise."""
         
+        # Add current conversation context for intro
+        history_text = ""
+        if conversation_history:
+            history_text = "\nCurrent conversation:\n"
+            for msg in conversation_history[-6:]:  # Last 6 exchanges
+                role = "Player" if msg['role'] == 'user' else "Coach TA"
+                history_text += f"{role}: {msg['content']}\n"
+        
         context_text = "\n\n".join([chunk.get('text', '') for chunk in context_chunks if chunk.get('text')])
         
         return f"""{intro_prompt}
+{history_text}
 
 Tennis Knowledge: {context_text}
 
@@ -657,26 +666,43 @@ Player says: "{user_question}"
 Respond naturally as Coach TA:"""
     
     else:
-        # REGULAR COACHING PROMPT
-        coaching_prompt = """You are Coach TA. Natural, conversational tennis coaching.
-
+        # REGULAR COACHING PROMPT WITH FULL CONTEXT
+        player_context = ""
+        if player_name and player_level:
+            player_context = f"Player: {player_name} (Level: {player_level})\n"
+        
+        coaching_prompt = f"""You are Coach TA coaching {player_name or 'the player'}.
+{player_context}
 COACHING STYLE:
 - Ask 1-2 quick questions about their specific situation
-- Then give ONE specific tip or drill
+- Then give ONE specific tip or drill appropriate for {player_level or 'their current'} level
 - End with: "How about we try this?" or "Sound good?" or "Want to give that a shot?"
 - Keep responses SHORT (2-3 sentences total)
 - Be encouraging and practical
 - Focus on actionable advice they can practice alone
 
-NEVER say "Hi there" or greet again - you're already in conversation."""
+CRITICAL MEMORY RULES:
+- NEVER ask about their level again - you already know they are {player_level or 'at their current level'}
+- NEVER ask "what's your name" - you are coaching {player_name or 'this player'}
+- Remember what you suggested earlier in this session
+- Build on the current conversation context
 
-        # Add history context
+NEVER say "Hi there" or greet again - you're already in conversation."""
+        
+        # Add previous session context
         history_text = ""
         if coaching_history and len(coaching_history) > 0:
             last_session = coaching_history[0]
             if last_session.get('technical_focus'):
-                history_text = f"\nLast session you worked on: {last_session['technical_focus']}"
-
+                history_text += f"\nPrevious session focus: {last_session['technical_focus']}"
+        
+        # Add current conversation context - THIS WAS THE MISSING PIECE!
+        if conversation_history and len(conversation_history) > 1:
+            history_text += "\nCurrent session conversation:\n"
+            for msg in conversation_history[-10:]:  # Last 10 exchanges to maintain context
+                role = "Player" if msg['role'] == 'user' else "Coach TA"
+                history_text += f"{role}: {msg['content']}\n"
+        
         context_text = "\n\n".join([chunk.get('text', '') for chunk in context_chunks if chunk.get('text')])
         
         return f"""{coaching_prompt}
@@ -826,6 +852,22 @@ def setup_player_session_with_continuity(player_email: str):
             return None
     
     return welcome_msg
+
+def get_current_player_info(player_record_id: str) -> tuple:
+    """Retrieve current player name and level from database"""
+    try:
+        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Players/{player_record_id}"
+        headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
+        
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            fields = response.json().get('fields', {})
+            name = fields.get('name', '')
+            level = fields.get('tennis_level', '')
+            return name, level
+        return '', ''
+    except Exception as e:
+        return '', ''
 
 def main():
     st.set_page_config(
@@ -1007,11 +1049,17 @@ def main():
                 
                 if chunks:
                     coaching_history = st.session_state.get('coaching_history', [])
+                    
+                    # Get current player info from database
+                    player_name, player_level = get_current_player_info(st.session_state.get("player_record_id", ""))
+                    
                     full_prompt = build_conversational_prompt_with_history(
                         prompt, 
                         chunks, 
                         st.session_state.messages[:-1],
-                        coaching_history
+                        coaching_history,
+                        player_name,
+                        player_level
                     )
                     
                     response = query_claude(claude_client, full_prompt)
@@ -1052,6 +1100,3 @@ def main():
                             "assistant",
                             error_msg
                         )
-
-if __name__ == "__main__":
-    main()
