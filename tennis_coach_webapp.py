@@ -928,6 +928,31 @@ def get_current_player_info(player_record_id: str) -> tuple:
     except Exception as e:
         return '', ''
 
+def is_valid_email(email: str) -> bool:
+    """
+    Robust email validation using regex pattern
+    Future-proof and handles international domains
+    """
+    import re
+    
+    # Comprehensive email regex pattern
+    # Handles: username+tags@subdomain.domain.extension
+    pattern = r'''
+        ^                       # Start of string
+        [a-zA-Z0-9]             # First character must be alphanumeric
+        [a-zA-Z0-9._%+-]*       # Username can contain letters, numbers, dots, underscores, percent, plus, hyphen
+        [a-zA-Z0-9]             # Last character of username must be alphanumeric
+        @                       # Required @ symbol
+        [a-zA-Z0-9]             # Domain must start with alphanumeric
+        [a-zA-Z0-9.-]*          # Domain can contain letters, numbers, dots, hyphens
+        [a-zA-Z0-9]             # Domain must end with alphanumeric
+        \.                      # Required dot before extension
+        [a-zA-Z]{2,}            # Extension must be at least 2 letters
+        $                       # End of string
+    '''
+    
+    return re.match(pattern, email.strip(), re.VERBOSE) is not None
+
 def main():
     st.set_page_config(
         page_title="Tennis Coach AI",
@@ -971,8 +996,10 @@ def main():
             # REMOVED: player_name input field - Coach TA will collect this
             
             if st.form_submit_button("Start Coaching Session", type="primary"):
-                if not player_email or "@" not in player_email:
-                    st.error("Please enter a valid email address.")
+                if not player_email:
+                    st.error("Please enter your email address.")
+                elif not is_valid_email(player_email):
+                    st.error("⚠️ Please enter a valid email address (example: yourname@domain.com)")
                 else:
                     with st.spinner("Setting up your coaching session..."):
                         welcome_msg = setup_player_session_with_continuity(player_email)
