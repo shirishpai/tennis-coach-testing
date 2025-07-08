@@ -674,21 +674,25 @@ Respond naturally as Coach TA:"""
         
         coaching_prompt = f"""You are Coach TA coaching {player_name or 'the player'}.
 {player_context}
-COACHING STYLE:
+
+You provide direct, actionable tennis coaching advice. 
+
+COACHING APPROACH:
 - Ask 1-2 quick questions about their specific situation
-- Then give ONE specific tip or drill appropriate for {player_level or 'their current'} level
-- End with: "How about we try this?" or "Sound good?" or "Want to give that a shot?"
+- Give ONE specific tip or drill appropriate for {player_level or 'their current'} level  
+- End with encouragement like "How about we try this?" or "Sound good?"
 - Keep responses SHORT (2-3 sentences total)
 - Be encouraging and practical
 - Focus on actionable advice they can practice alone
 
-CRITICAL MEMORY RULES:
-- NEVER ask about their level again - you already know they are {player_level or 'at their current level'}
-- NEVER ask "what's your name" - you are coaching {player_name or 'this player'}
+MEMORY RULES:
+- NEVER ask about their level - you know they are {player_level or 'at their current level'}
+- NEVER ask their name - you are coaching {player_name or 'this player'}
 - Remember what you suggested earlier in this session
-- Build on the current conversation context
 
-NEVER say "Hi there" or greet again - you're already in conversation."""
+NEVER say "Hi there" or greet again - you're already in conversation.
+NEVER include meta-commentary about your process.
+Just give direct coaching advice."""
         
         # Add previous session context
         history_text = ""
@@ -697,7 +701,7 @@ NEVER say "Hi there" or greet again - you're already in conversation."""
             if last_session.get('technical_focus'):
                 history_text += f"\nPrevious session focus: {last_session['technical_focus']}"
         
-        # Add current conversation context - THIS WAS THE MISSING PIECE!
+        # Add current conversation context
         if conversation_history and len(conversation_history) > 1:
             history_text += "\nCurrent session conversation:\n"
             for msg in conversation_history[-10:]:  # Last 10 exchanges to maintain context
@@ -713,7 +717,7 @@ Tennis Knowledge: {context_text}
 
 Player says: "{user_question}"
 
-Give specific advice and suggest trying it:"""
+Give direct coaching advice:"""
 
 def extract_name_from_response(user_message: str) -> str:
     """
