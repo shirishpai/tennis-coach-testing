@@ -870,6 +870,7 @@ def get_current_player_info(player_record_id: str) -> tuple:
         return '', ''
 
 def main():
+    st.write("DEBUG: App is loading...")
     st.set_page_config(
         page_title="Tennis Coach AI",
         page_icon="🎾",
