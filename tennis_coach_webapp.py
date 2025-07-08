@@ -3,6 +3,8 @@ import os
 import json
 from typing import List, Dict
 import time
+import pandas as pd
+from datetime import datetime
 
 try:
     from pinecone import Pinecone
@@ -1007,6 +1009,268 @@ def generate_dynamic_session_ending(conversation_history: list, player_name: str
     
     return f"{effort} {learning} {motivation}"
 
+# ============== ADMIN INTERFACE FUNCTIONS ==============
+
+def get_all_coaching_sessions():
+    """Fetch all coaching sessions with player info for admin dropdown"""
+    try:
+        # Get all Active_Sessions
+        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
+        headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
+        params = {
+            "sort[0][field]": "timestamp",
+            "sort[0][direction]": "desc",
+            "maxRecords": 500
+        }
+        
+        response = requests.get(url, headers=headers, params=params)
+        if response.status_code != 200:
+            return []
+        
+        records = response.json().get('records', [])
+        
+        # Group by session_id and get session info
+        sessions = {}
+        for record in records:
+            fields = record.get('fields', {})
+            session_id = fields.get('session_id')
+            player_ids = fields.get('player_id', [])
+            
+            if session_id and player_ids:
+                player_id = player_ids[0] if isinstance(player_ids, list) else player_ids
+                
+                if session_id not in sessions:
+                    sessions[session_id] = {
+                        'session_id': session_id,
+                        'player_id': player_id,
+                        'message_count': 0,
+                        'first_message_time': fields.get('timestamp', ''),
+                        'status': fields.get('session_status', 'unknown')
+                    }
+                
+                sessions[session_id]['message_count'] += 1
+        
+        # Get player names
+        session_list = []
+        for session_data in sessions.values():
+            player_name = get_player_name(session_data['player_id'])
+            session_list.append({
+                'session_id': session_data['session_id'],
+                'player_name': player_name,
+                'message_count': session_data['message_count'],
+                'timestamp': session_data['first_message_time'],
+                'status': session_data['status']
+            })
+        
+        return sorted(session_list, key=lambda x: x['timestamp'], reverse=True)
+        
+    except Exception as e:
+        st.error(f"Error fetching sessions: {e}")
+        return []
+
+def get_player_name(player_id: str) -> str:
+    """Get player name by ID"""
+    try:
+        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Players/{player_id}"
+        headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
+        
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            fields = response.json().get('fields', {})
+            name = fields.get('name', 'Unknown Player')
+            email = fields.get('email', '')
+            return f"{name}" if name != 'Unknown Player' else email.split('@')[0] if email else 'Unknown'
+        return 'Unknown Player'
+    except Exception:
+        return 'Unknown Player'
+
+def get_conversation_messages(session_id: int) -> list:
+    """Fetch all messages for a specific session"""
+    try:
+        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
+        headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
+        params = {
+            "filterByFormula": f"{{session_id}} = {session_id}",
+            "sort[0][field]": "message_order",
+            "sort[0][direction]": "asc"
+        }
+        
+        response = requests.get(url, headers=headers, params=params)
+        if response.status_code == 200:
+            records = response.json().get('records', [])
+            messages = []
+            
+            for record in records:
+                fields = record.get('fields', {})
+                messages.append({
+                    'role': fields.get('role', ''),
+                    'content': fields.get('message_content', ''),
+                    'order': fields.get('message_order', 0),
+                    'timestamp': fields.get('timestamp', ''),
+                    'coaching_resources': fields.get('coaching_resources_used', 0),
+                    'resource_details': fields.get('resource_details', '')
+                })
+            
+            return messages
+        return []
+    except Exception as e:
+        st.error(f"Error fetching conversation: {e}")
+        return []
+
+def display_admin_interface():
+    """Main admin interface display"""
+    st.title("🔧 Tennis Coach AI - Admin Interface")
+    st.markdown("### Session Management & Analytics")
+    st.markdown("---")
+    
+    # Session selector
+    sessions = get_all_coaching_sessions()
+    
+    if not sessions:
+        st.warning("No coaching sessions found in the database.")
+        return
+    
+    # Create session options for dropdown
+    session_options = {}
+    for session in sessions:
+        timestamp = session['timestamp']
+        try:
+            # Parse timestamp and format it nicely
+            dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+            formatted_time = dt.strftime("%m/%d %H:%M")
+        except:
+            formatted_time = "Unknown time"
+        
+        status_emoji = "✅" if session['status'] == 'completed' else "🟡"
+        display_name = f"{status_emoji} {session['player_name']} - {session['message_count']} msgs - {formatted_time}"
+        session_options[display_name] = session['session_id']
+    
+    # Session selection dropdown
+    selected_session_display = st.selectbox(
+        "🎾 Select Coaching Session",
+        options=list(session_options.keys()),
+        help="Choose a session to view the full conversation and analytics"
+    )
+    
+    if selected_session_display:
+        selected_session_id = session_options[selected_session_display]
+        
+        # Display session details
+        session_info = next(s for s in sessions if s['session_id'] == selected_session_id)
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Player", session_info['player_name'])
+        with col2:
+            st.metric("Messages", session_info['message_count'])
+        with col3:
+            status_display = "Completed ✅" if session_info['status'] == 'completed' else "Active 🟡"
+            st.metric("Status", status_display)
+        
+        st.markdown("---")
+        
+        # Fetch and display conversation
+        messages = get_conversation_messages(selected_session_id)
+        
+        if messages:
+            st.markdown("### 💬 Conversation Log")
+            
+            # Create tabs for different views
+            tab1, tab2 = st.tabs(["Chat View", "Analytics"])
+            
+            with tab1:
+                # Display chat-style conversation
+                for msg in messages:
+                    role = msg['role']
+                    content = msg['content']
+                    resources_used = msg.get('coaching_resources', 0)
+                    
+                    if role == 'player':
+                        # Player message - left aligned, blue background
+                        st.markdown(f"""
+                        <div style="display: flex; justify-content: flex-start; margin: 10px 0;">
+                            <div style="background-color: #E3F2FD; padding: 10px 15px; border-radius: 18px; max-width: 70%; border: 1px solid #BBDEFB;">
+                                <strong>🧑‍🎓 Player:</strong><br>
+                                {content}
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    
+                    else:  # coach
+                        # Coach message - right aligned, green background
+                        resources_indicator = f" 📚 {resources_used} resources" if resources_used > 0 else ""
+                        st.markdown(f"""
+                        <div style="display: flex; justify-content: flex-end; margin: 10px 0;">
+                            <div style="background-color: #E8F5E8; padding: 10px 15px; border-radius: 18px; max-width: 70%; border: 1px solid #C8E6C9;">
+                                <strong>🎾 Coach TA:</strong>{resources_indicator}<br>
+                                {content}
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        # Show resource details if available
+                        if resources_used > 0 and msg.get('resource_details'):
+                            with st.expander(f"📊 View {resources_used} coaching resources used"):
+                                st.text(msg['resource_details'])
+            
+            with tab2:
+                # Analytics view
+                st.markdown("### 📊 Session Analytics")
+                
+                # Calculate analytics
+                total_messages = len(messages)
+                player_messages = len([m for m in messages if m['role'] == 'player'])
+                coach_messages = len([m for m in messages if m['role'] == 'coach'])
+                total_resources = sum(m.get('coaching_resources', 0) for m in messages)
+                
+                # Display metrics
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Total Messages", total_messages)
+                with col2:
+                    st.metric("Player Messages", player_messages)
+                with col3:
+                    st.metric("Coach Responses", coach_messages)
+                with col4:
+                    st.metric("Resources Used", total_resources)
+                
+                # Resource usage breakdown
+                if total_resources > 0:
+                    st.markdown("#### 📚 Resource Usage by Response")
+                    resource_data = []
+                    for i, msg in enumerate(messages):
+                        if msg['role'] == 'coach' and msg.get('coaching_resources', 0) > 0:
+                            resource_data.append({
+                                'Response #': i + 1,
+                                'Resources Used': msg['coaching_resources'],
+                                'Preview': msg['content'][:100] + "..." if len(msg['content']) > 100 else msg['content']
+                            })
+                    
+                    if resource_data:
+                        df = pd.DataFrame(resource_data)
+                        st.dataframe(df, use_container_width=True)
+                
+                # Message length analysis
+                st.markdown("#### 📏 Message Length Analysis")
+                player_lengths = [len(m['content'].split()) for m in messages if m['role'] == 'player']
+                coach_lengths = [len(m['content'].split()) for m in messages if m['role'] == 'coach']
+                
+                if player_lengths and coach_lengths:
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.metric("Avg Player Message", f"{sum(player_lengths)//len(player_lengths)} words")
+                    with col2:
+                        st.metric("Avg Coach Response", f"{sum(coach_lengths)//len(coach_lengths)} words")
+        
+        else:
+            st.warning("No messages found for this session.")
+    
+    # Exit admin mode
+    st.markdown("---")
+    if st.button("🏃‍♂️ Exit Admin Mode", type="primary"):
+        st.session_state.admin_mode = False
+        st.rerun()
+
 def main():
     st.set_page_config(
         page_title="Tennis Coach AI",
@@ -1015,6 +1279,13 @@ def main():
         initial_sidebar_state="collapsed"
     )
     
+    # ============== ADMIN MODE CHECK ==============
+    # Check for admin mode trigger - NEW ADDITION
+    if st.session_state.get('admin_mode', False):
+        display_admin_interface()
+        return
+    
+    # ============== EXISTING CODE CONTINUES ==============
     st.title("🎾 Tennis Coach AI")
     st.markdown("*Your personal tennis coaching assistant*")
     st.markdown("---")
@@ -1087,6 +1358,13 @@ def main():
             st.markdown(message["content"])
     
     if prompt := st.chat_input("Ask your tennis coach..."):
+        # ============== ADMIN TRIGGER CHECK - NEW ADDITION ==============
+        if prompt.strip().lower() == "hilly spike":
+            st.session_state.admin_mode = True
+            st.rerun()
+            return
+        
+        # ============== EXISTING CHAT PROCESSING CONTINUES ==============
         # Smart session end detection
         end_result = detect_session_end(prompt, st.session_state.messages)
         
@@ -1283,6 +1561,3 @@ def main():
                             "assistant",
                             error_msg
                         )
-
-if __name__ == "__main__":
-    main()
