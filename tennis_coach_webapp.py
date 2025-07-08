@@ -1091,9 +1091,9 @@ def main():
     if prompt := st.chat_input("Ask your tennis coach..."):
         # SIMPLE ADMIN TEST - NO FUNCTIONS YET
         if prompt.strip().lower() == "hilly spike":
-        st.success("🔧 Admin mode trigger detected! (Interface coming soon...)")
-        st.write("Your app is working and admin trigger is functional")
-        return
+            st.success("🔧 Admin mode trigger detected! (Interface coming soon...)")
+            st.write("Your app is working and admin trigger is functional")
+            return
     
     # Your existing chat processing continues here...
     end_result = detect_session_end(prompt, st.session_state.messages)
