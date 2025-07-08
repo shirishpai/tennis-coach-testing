@@ -872,18 +872,13 @@ def setup_player_session_with_continuity(player_email: str):
             recent_summaries = get_player_recent_summaries(existing_player['id'], 2)
             st.session_state.coaching_history = recent_summaries
         
-        if recent_summaries:
-            last_session = recent_summaries[0]
-            context_text = f"\n\nLast session we worked on: {last_session.get('technical_focus', 'technique practice')}"
-            if last_session.get('homework_assigned'):
-                context_text += f"\n\nI assigned you: {last_session.get('homework_assigned', '')}"
-            if last_session.get('next_session_focus'):
-                context_text += f"\n\nToday I'd like to focus on: {last_session.get('next_session_focus', '')}"
-            context_text += "\n\nHow did that practice go? Ready to continue?"
-        else:
-            context_text = "\n\nWhat shall we work on today?"
-        
-        welcome_msg = f"Hi {player_name}! Coach TA here. Great to see you back!\n\nThis is session #{session_number}{context_text}"
+        # Use the updated concise welcome message function
+        welcome_msg = generate_personalized_welcome_message(
+            player_name, 
+            session_number, 
+            recent_summaries, 
+            True  # is_returning = True
+        )
         
         update_player_session_count(existing_player['id'])
         
