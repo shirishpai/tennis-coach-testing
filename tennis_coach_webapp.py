@@ -650,7 +650,7 @@ def get_player_recent_summaries(player_record_id: str, limit: int = 3) -> list:
 # ENHANCED: Welcome message generation with better context
 def generate_personalized_welcome_message(player_name: str, session_number: int, recent_summaries: list, is_returning: bool) -> str:
     """
-    Generate a personalized welcome message based on coaching history
+    Generate a concise, scannable welcome message for returning players
     """
     if not is_returning or not recent_summaries:
         # NEW PLAYER - Coach TA introduction sequence
@@ -659,26 +659,21 @@ def generate_personalized_welcome_message(player_name: str, session_number: int,
     # RETURNING PLAYER with history
     last_session = recent_summaries[0]
     
-    welcome_parts = [
-        f"Hi {player_name}! Coach TA here. Great to see you back!",
-        f"\n**This is session #{session_number}**"
-    ]
+    # Build concise welcome
+    welcome_parts = [f"Hi {player_name}! Coach TA here. **Session #{session_number}** 🎾"]
     
-    # Add context from last session
+    # Add ONE key item from last session (priority order)
     if last_session.get('technical_focus'):
-        welcome_parts.append(f"\n🎯 **Last session:** We worked on {last_session['technical_focus']}")
+        focus = last_session['technical_focus'][:50] + "..." if len(last_session['technical_focus']) > 50 else last_session['technical_focus']
+        welcome_parts.append(f"\n**Last time:** {focus}")
     
+    # Add homework check if exists
     if last_session.get('homework_assigned'):
-        welcome_parts.append(f"\n📝 **Your homework:** {last_session['homework_assigned']}")
-        welcome_parts.append("\n*How did that practice go?*")
-    
-    if last_session.get('next_session_focus'):
-        welcome_parts.append(f"\n🎾 **Today's focus:** {last_session['next_session_focus']}")
-    
-    if last_session.get('key_breakthroughs'):
-        welcome_parts.append(f"\n⚡ **Last breakthrough:** {last_session['key_breakthroughs']}")
-    
-    welcome_parts.append("\n\nWhat would you like to work on today?")
+        homework = last_session['homework_assigned'][:60] + "..." if len(last_session['homework_assigned']) > 60 else last_session['homework_assigned']
+        welcome_parts.append(f"\n**Your practice:** {homework}")
+        welcome_parts.append(f"\n\n*How did it go?*")
+    else:
+        welcome_parts.append(f"\n\nWhat would you like to work on today?")
     
     return "".join(welcome_parts)
 
