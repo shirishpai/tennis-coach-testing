@@ -15,7 +15,6 @@ except ImportError as e:
     st.error(f"Missing package: {e}")
     st.stop()
 
-st.write("🔵 DEBUG: File loaded, checking functions...")
 
 @st.cache_resource
 def setup_connections():
@@ -855,8 +854,6 @@ def setup_player_session_with_continuity(player_email: str):
     
     return welcome_msg
 
-st.write("🟡 DEBUG: About to define get_current_player_info")
-
 def get_current_player_info(player_record_id: str) -> tuple:
     """Retrieve current player name and level from database"""
     try:
@@ -872,8 +869,6 @@ def get_current_player_info(player_record_id: str) -> tuple:
         return '', ''
     except Exception as e:
         return '', ''
-
-st.write("🟢 DEBUG: get_current_player_info defined successfully")
 
 def main():
     st.set_page_config(
