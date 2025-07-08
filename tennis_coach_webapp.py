@@ -1280,8 +1280,8 @@ def main():
     )
     
     # ============== ADMIN MODE CHECK ==============
-    # Check for admin mode trigger - NEW ADDITION
-    if st.session_state.get('admin_mode', False):
+    # Check for admin mode trigger - TEMPORARILY DISABLED
+    if False:  # Changed from st.session_state.get('admin_mode', False):
         display_admin_interface()
         return
     
@@ -1360,8 +1360,7 @@ def main():
     if prompt := st.chat_input("Ask your tennis coach..."):
         # ============== ADMIN TRIGGER CHECK - NEW ADDITION ==============
         if prompt.strip().lower() == "hilly spike":
-            st.session_state.admin_mode = True
-            st.rerun()
+            st.write("Admin trigger detected - but admin mode is disabled for testing")
             return
         
         # ============== EXISTING CHAT PROCESSING CONTINUES ==============
