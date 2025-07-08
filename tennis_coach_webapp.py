@@ -3,6 +3,8 @@ import os
 import json
 from typing import List, Dict
 import time
+import pandas as pd          # NEW
+from datetime import datetime # NEW
 
 try:
     from pinecone import Pinecone
