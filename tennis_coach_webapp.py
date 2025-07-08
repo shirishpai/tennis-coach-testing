@@ -1089,8 +1089,8 @@ def main():
             st.markdown(message["content"])
     
     if prompt := st.chat_input("Ask your tennis coach..."):
-    # SIMPLE ADMIN TEST - NO FUNCTIONS YET
-    if prompt.strip().lower() == "hilly spike":
+        # SIMPLE ADMIN TEST - NO FUNCTIONS YET
+        if prompt.strip().lower() == "hilly spike":
         st.success("🔧 Admin mode trigger detected! (Interface coming soon...)")
         st.write("Your app is working and admin trigger is functional")
         return
