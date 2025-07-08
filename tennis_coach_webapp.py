@@ -1184,11 +1184,11 @@ def main():
         
         # If session is ending, provide closing response and mark as completed
         if st.session_state.get("session_ending"):
-    with st.chat_message("assistant"):
-        # Get player name for personalization
-        player_name, _ = get_current_player_info(st.session_state.get("player_record_id", ""))
-        closing_response = generate_dynamic_session_ending(st.session_state.messages, player_name)
-        st.markdown(closing_response)
+            with st.chat_message("assistant"):
+                # Get player name for personalized ending message
+                player_name, _ = get_current_player_info(st.session_state.get("player_record_id", ""))
+                closing_response = generate_dynamic_session_ending(st.session_state.messages, player_name)
+                st.markdown(closing_response)
                 
                 # Log closing response
                 st.session_state.message_counter += 1
