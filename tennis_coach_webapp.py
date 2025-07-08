@@ -953,6 +953,70 @@ def is_valid_email(email: str) -> bool:
     
     return re.match(pattern, email.strip(), re.VERBOSE) is not None
 
+def generate_dynamic_session_ending(conversation_history: list, player_name: str = "") -> str:
+    """
+    Generate personalized, varied session ending messages focused on effort, learning, and motivation
+    """
+    import random
+    
+    # Analyze the session to personalize the message
+    session_content = " ".join([msg['content'].lower() for msg in conversation_history if msg['role'] == 'user'])
+    
+    # Detect what they worked on
+    techniques = []
+    if any(word in session_content for word in ['forehand', 'forehand']):
+        techniques.append('forehand')
+    if any(word in session_content for word in ['backhand', 'backhand']):
+        techniques.append('backhand')
+    if any(word in session_content for word in ['serve', 'serving']):
+        techniques.append('serve')
+    if any(word in session_content for word in ['volley', 'net']):
+        techniques.append('volleys')
+    if any(word in session_content for word in ['footwork', 'movement']):
+        techniques.append('footwork')
+    
+    # Effort acknowledgments (varied)
+    effort_phrases = [
+        f"Love your commitment today{f', {player_name}' if player_name else ''}!",
+        "You really focused on the details today - that's how improvement happens!",
+        f"Great questions today{f', {player_name}' if player_name else ''} - shows you're thinking like a player!",
+        "I can see you're putting in the mental work - that's just as important as physical practice!",
+        "Your dedication to getting better really shows!"
+    ]
+    
+    # Learning/challenge acknowledgments
+    if techniques:
+        technique_work = techniques[0] if len(techniques) == 1 else f"{techniques[0]} and {techniques[1]}"
+        learning_phrases = [
+            f"Working on {technique_work} takes patience - you're on the right track!",
+            f"Those {technique_work} adjustments we discussed will click with practice!",
+            f"Remember, mastering {technique_work} is a process - every rep counts!",
+            f"The {technique_work} work we covered today will pay off on court!"
+        ]
+    else:
+        learning_phrases = [
+            "The concepts we covered today will make more sense as you practice them!",
+            "Breaking down technique like this is how real improvement happens!",
+            "Those adjustments take time to feel natural - trust the process!",
+            "Every detail we discussed today builds toward better tennis!"
+        ]
+    
+    # Motivational closings
+    motivation_phrases = [
+        "Keep that curiosity and drive - it's your biggest asset! 🎾",
+        "You've got the right mindset to take your game to the next level! 🎾",
+        "Stay patient with yourself and trust the process - you're improving! 🎾",
+        "That focus you showed today is what separates good players from great ones! 🎾",
+        "Keep asking great questions and putting in the work - exciting progress ahead! 🎾"
+    ]
+    
+    # Combine randomly
+    effort = random.choice(effort_phrases)
+    learning = random.choice(learning_phrases)
+    motivation = random.choice(motivation_phrases)
+    
+    return f"{effort} {learning} {motivation}"
+
 def main():
     st.set_page_config(
         page_title="Tennis Coach AI",
@@ -1120,9 +1184,11 @@ def main():
         
         # If session is ending, provide closing response and mark as completed
         if st.session_state.get("session_ending"):
-            with st.chat_message("assistant"):
-                closing_response = "Great session today! I've saved our progress and I'll remember what we worked on. Keep practicing those techniques, and I'll be here whenever you need coaching support. Take care! 🎾"
-                st.markdown(closing_response)
+    with st.chat_message("assistant"):
+        # Get player name for personalization
+        player_name, _ = get_current_player_info(st.session_state.get("player_record_id", ""))
+        closing_response = generate_dynamic_session_ending(st.session_state.messages, player_name)
+        st.markdown(closing_response)
                 
                 # Log closing response
                 st.session_state.message_counter += 1
