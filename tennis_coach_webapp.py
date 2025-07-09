@@ -1012,15 +1012,17 @@ def generate_dynamic_session_ending(conversation_history: list, player_name: str
 # Add these functions RIGHT BEFORE your main() function
 # REPLACE your existing admin functions with these enhanced versions
 
+# REPLACE all your existing admin functions with these updated versions
+
 def get_all_coaching_sessions():
-    """Fetch all coaching sessions with resource analytics"""
+    """Fetch all coaching sessions with resource analytics from Conversation_Log"""
     try:
-        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
+        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Conversation_Log"
         headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
         params = {
-            "sort[0][field]": "timestamp",
+            "sort[0][field]": "log_id",
             "sort[0][direction]": "desc",
-            "maxRecords": 100
+            "maxRecords": 1000
         }
         
         response = requests.get(url, headers=headers, params=params)
@@ -1033,27 +1035,39 @@ def get_all_coaching_sessions():
         sessions = {}
         for record in records:
             fields = record.get('fields', {})
-            session_id = fields.get('session_id')
+            session_ids = fields.get('session_id', [])
             
-            if session_id:
-                if session_id not in sessions:
-                    sessions[session_id] = {
-                        'session_id': session_id,
-                        'message_count': 0,
-                        'total_resources': 0,
-                        'coach_responses': 0,
-                        'timestamp': fields.get('timestamp', ''),
-                        'status': fields.get('session_status', 'unknown')
-                    }
-                
-                sessions[session_id]['message_count'] += 1
-                
-                # Track coaching resources used
-                if fields.get('role') == 'coach':
-                    sessions[session_id]['coach_responses'] += 1
-                    resources_used = fields.get('coaching_resources_used', 0)
-                    if resources_used:
-                        sessions[session_id]['total_resources'] += resources_used
+            # Handle session_id as link field (array)
+            if isinstance(session_ids, list) and session_ids:
+                session_id = session_ids[0]  # Get first linked session
+            else:
+                continue  # Skip if no session_id
+            
+            if session_id not in sessions:
+                sessions[session_id] = {
+                    'session_id': session_id,
+                    'message_count': 0,
+                    'total_resources': 0,
+                    'coach_responses': 0,
+                    'timestamp': '',
+                    'status': 'active'  # Default status
+                }
+            
+            sessions[session_id]['message_count'] += 1
+            
+            # Track coaching resources used and get timestamp
+            role = fields.get('role')
+            if role == 'coach':
+                sessions[session_id]['coach_responses'] += 1
+                resources_used = fields.get('coaching_resources_used', 0)
+                if resources_used:
+                    sessions[session_id]['total_resources'] += resources_used
+            
+            # Update timestamp (use most recent)
+            current_timestamp = fields.get('log_id', 0)  # Using log_id as timestamp proxy
+            if current_timestamp > sessions[session_id].get('latest_log_id', 0):
+                sessions[session_id]['latest_log_id'] = current_timestamp
+                sessions[session_id]['timestamp'] = str(current_timestamp)
         
         # Calculate resource efficiency
         for session in sessions.values():
@@ -1062,43 +1076,55 @@ def get_all_coaching_sessions():
             else:
                 session['resources_per_response'] = 0
         
-        return list(sessions.values())
+        # Sort by latest activity
+        sessions_list = list(sessions.values())
+        sessions_list.sort(key=lambda x: x.get('latest_log_id', 0), reverse=True)
+        
+        return sessions_list
         
     except Exception as e:
-        st.error(f"Error fetching sessions: {e}")
+        st.error(f"Error fetching sessions from Conversation_Log: {e}")
         return []
 
-def get_conversation_messages_with_resources(session_id: int):
-    """Fetch all messages for a specific session with resource details"""
+def get_conversation_messages_with_resources(session_id):
+    """Fetch all messages for a specific session with resource details from Conversation_Log"""
     try:
-        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
+        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Conversation_Log"
         headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
+        
+        # Get all records and filter client-side (Airtable link filtering can be tricky)
         params = {
-            "filterByFormula": f"{{session_id}} = {session_id}",
             "sort[0][field]": "message_order",
-            "sort[0][direction]": "asc"
+            "sort[0][direction]": "asc",
+            "maxRecords": 1000
         }
         
         response = requests.get(url, headers=headers, params=params)
         if response.status_code == 200:
-            records = response.json().get('records', [])
+            all_records = response.json().get('records', [])
             messages = []
             
-            for record in records:
+            for record in all_records:
                 fields = record.get('fields', {})
-                messages.append({
-                    'role': fields.get('role', ''),
-                    'content': fields.get('message_content', ''),
-                    'order': fields.get('message_order', 0),
-                    'resources_used': fields.get('coaching_resources_used', 0),
-                    'resource_details': fields.get('resource_details', ''),
-                    'timestamp': fields.get('timestamp', '')
-                })
+                record_session_ids = fields.get('session_id', [])
+                
+                # Check if this record belongs to our session
+                if isinstance(record_session_ids, list) and session_id in record_session_ids:
+                    messages.append({
+                        'role': fields.get('role', ''),
+                        'content': fields.get('message_content', ''),
+                        'order': fields.get('message_order', 0),
+                        'resources_used': fields.get('coaching_resources_used', 0),
+                        'resource_details': fields.get('resource_details', ''),
+                        'log_id': fields.get('log_id', 0)
+                    })
             
+            # Sort by message order
+            messages.sort(key=lambda x: x['order'])
             return messages
         return []
     except Exception as e:
-        st.error(f"Error fetching conversation: {e}")
+        st.error(f"Error fetching conversation from Conversation_Log: {e}")
         return []
 
 def display_resource_analytics(messages):
@@ -1150,8 +1176,6 @@ def display_resource_analytics(messages):
                         st.markdown("**Resources Used:**")
                         st.text(msg['resource_details'])
 
-# ADD these new functions to your admin functions (before display_admin_interface)
-
 def get_all_players():
     """Fetch all players with their session counts and engagement metrics"""
     try:
@@ -1189,8 +1213,8 @@ def get_all_players():
         st.error(f"Error fetching players: {e}")
         return []
 
-def get_player_sessions(player_id: str):
-    """Get all sessions for a specific player with detailed metrics"""
+def get_player_sessions_from_conversation_log(player_id: str):
+    """Get all sessions for a specific player from Conversation_Log with detailed metrics"""
     try:
         # First get player info
         player_url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Players/{player_id}"
@@ -1202,12 +1226,12 @@ def get_player_sessions(player_id: str):
         
         player_info = player_response.json().get('fields', {})
         
-        # Get all Active_Sessions records
-        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
+        # Get all Conversation_Log records
+        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Conversation_Log"
         params = {
-            "sort[0][field]": "timestamp",
+            "sort[0][field]": "log_id",
             "sort[0][direction]": "desc",
-            "maxRecords": 500
+            "maxRecords": 1000
         }
         
         response = requests.get(url, headers=headers, params=params)
@@ -1220,66 +1244,94 @@ def get_player_sessions(player_id: str):
         player_sessions = {}
         for record in all_records:
             fields = record.get('fields', {})
-            record_player_ids = fields.get('player_id', [])
             
             # Check if this record belongs to our player
+            # Note: We'll need to cross-reference session_id with Active_Sessions to get player_id
+            # For now, we'll use a simpler approach by getting sessions from Active_Sessions first
+            
+        # Alternative approach: Get sessions from Active_Sessions, then get details from Conversation_Log
+        active_sessions_url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
+        active_params = {
+            "sort[0][field]": "timestamp",
+            "sort[0][direction]": "desc", 
+            "maxRecords": 500
+        }
+        
+        active_response = requests.get(active_sessions_url, headers=headers, params=active_params)
+        if active_response.status_code != 200:
+            return [], player_info
+            
+        active_records = active_response.json().get('records', [])
+        
+        # Find sessions for this player
+        player_session_ids = set()
+        for record in active_records:
+            fields = record.get('fields', {})
+            record_player_ids = fields.get('player_id', [])
+            
             if isinstance(record_player_ids, list) and player_id in record_player_ids:
                 session_id = fields.get('session_id')
                 if session_id:
-                    if session_id not in player_sessions:
-                        player_sessions[session_id] = {
+                    player_session_ids.add(session_id)
+        
+        # Now get detailed metrics from Conversation_Log for these sessions
+        session_metrics = {}
+        for record in all_records:
+            fields = record.get('fields', {})
+            record_session_ids = fields.get('session_id', [])
+            
+            for session_id in record_session_ids:
+                if session_id in player_session_ids:
+                    if session_id not in session_metrics:
+                        session_metrics[session_id] = {
                             'session_id': session_id,
                             'message_count': 0,
                             'total_resources': 0,
                             'coach_responses': 0,
                             'player_responses': 0,
-                            'first_message_time': fields.get('timestamp', ''),
-                            'last_message_time': fields.get('timestamp', ''),
-                            'status': fields.get('session_status', 'unknown')
+                            'first_log_id': float('inf'),
+                            'last_log_id': 0,
+                            'status': 'completed'
                         }
                     
-                    session = player_sessions[session_id]
+                    session = session_metrics[session_id]
                     session['message_count'] += 1
                     
                     # Track message types and resources
-                    if fields.get('role') == 'coach':
+                    role = fields.get('role')
+                    if role == 'coach':
                         session['coach_responses'] += 1
                         resources_used = fields.get('coaching_resources_used', 0)
                         if resources_used:
                             session['total_resources'] += resources_used
-                    elif fields.get('role') == 'player':
+                    elif role == 'player':
                         session['player_responses'] += 1
                     
-                    # Update timestamp range
-                    current_time = fields.get('timestamp', '')
-                    if current_time > session['last_message_time']:
-                        session['last_message_time'] = current_time
-                    if current_time < session['first_message_time']:
-                        session['first_message_time'] = current_time
+                    # Track log_id range for rough timing
+                    log_id = fields.get('log_id', 0)
+                    if log_id < session['first_log_id']:
+                        session['first_log_id'] = log_id
+                    if log_id > session['last_log_id']:
+                        session['last_log_id'] = log_id
         
-        # Calculate session duration and efficiency metrics
-        for session in player_sessions.values():
+        # Calculate session efficiency metrics
+        for session in session_metrics.values():
             if session['coach_responses'] > 0:
                 session['resources_per_response'] = round(session['total_resources'] / session['coach_responses'], 1)
             else:
                 session['resources_per_response'] = 0
             
-            # Calculate session duration (rough estimate)
-            try:
-                start = datetime.fromisoformat(session['first_message_time'].replace('Z', '+00:00'))
-                end = datetime.fromisoformat(session['last_message_time'].replace('Z', '+00:00'))
-                duration_minutes = (end - start).total_seconds() / 60
-                session['duration_minutes'] = round(duration_minutes, 1)
-            except:
-                session['duration_minutes'] = 0
+            # Rough duration estimate based on log_id difference
+            session['duration_minutes'] = max(1, (session['last_log_id'] - session['first_log_id']) * 0.1)
+            session['first_message_time'] = str(session['first_log_id'])
         
-        sessions_list = list(player_sessions.values())
-        sessions_list.sort(key=lambda x: x['first_message_time'], reverse=True)
+        sessions_list = list(session_metrics.values())
+        sessions_list.sort(key=lambda x: x['first_log_id'], reverse=True)
         
         return sessions_list, player_info
         
     except Exception as e:
-        st.error(f"Error fetching player sessions: {e}")
+        st.error(f"Error fetching player sessions from Conversation_Log: {e}")
         return [], {}
 
 def display_player_engagement_analytics(sessions, player_info):
@@ -1325,17 +1377,12 @@ def display_player_engagement_analytics(sessions, player_info):
     st.markdown("#### 📅 Session History")
     session_data = []
     for i, session in enumerate(sessions):
-        try:
-            session_date = datetime.fromisoformat(session['first_message_time'].replace('Z', '+00:00')).strftime("%m/%d/%Y %H:%M")
-        except:
-            session_date = "Unknown"
-        
         session_data.append({
             'Session #': len(sessions) - i,  # Most recent = highest number
-            'Date': session_date,
+            'Session ID': session['session_id'],
             'Messages': session['message_count'],
             'Resources': session['total_resources'],
-            'Duration (min)': session['duration_minutes'],
+            'Duration (min)': f"{session['duration_minutes']:.1f}",
             'Status': session['status'].title()
         })
     
@@ -1363,10 +1410,8 @@ def display_player_engagement_analytics(sessions, player_info):
             with col2:
                 st.write(f"{trend_emoji} **Engagement Trend:** {'Increasing' if message_trend > 0 else 'Decreasing' if message_trend < 0 else 'Stable'}")
 
-# REPLACE your existing display_admin_interface function with this enhanced version
-
 def display_admin_interface():
-    """Enhanced admin interface with player engagement tracking"""
+    """Enhanced admin interface reading from Conversation_Log for resource analytics"""
     st.title("🔧 Tennis Coach AI - Admin Interface")
     st.markdown("### Session Management & Player Analytics")
     st.markdown("---")
@@ -1375,11 +1420,11 @@ def display_admin_interface():
     tab1, tab2 = st.tabs(["📊 All Sessions", "👥 Player Engagement"])
     
     with tab1:
-        # Original session overview (keep existing functionality)
+        # Session overview from Conversation_Log
         sessions = get_all_coaching_sessions()
         
         if not sessions:
-            st.warning("No coaching sessions found.")
+            st.warning("No coaching sessions found in Conversation_Log.")
         else:
             st.markdown(f"**Found {len(sessions)} coaching sessions:**")
             
@@ -1398,20 +1443,14 @@ def display_admin_interface():
             
             st.markdown("---")
             
-            # Session selector (keep existing session analysis)
+            # Session selector
             session_options = {}
             for session in sessions[:15]:
-                timestamp = session['timestamp']
-                try:
-                    dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-                    formatted_time = dt.strftime("%m/%d %H:%M")
-                except:
-                    formatted_time = "Unknown time"
-                
+                session_id = session['session_id']
                 status_emoji = "✅" if session['status'] == 'completed' else "🟡"
                 resource_info = f"📚{session['total_resources']}"
-                display_name = f"{status_emoji} Session {session['session_id']} | {session['message_count']} msgs | {resource_info} | {formatted_time}"
-                session_options[display_name] = session['session_id']
+                display_name = f"{status_emoji} Session {session_id} | {session['message_count']} msgs | {resource_info}"
+                session_options[display_name] = session_id
             
             selected_display = st.selectbox(
                 "🎾 Select Session to Analyze",
@@ -1436,7 +1475,7 @@ def display_admin_interface():
                 
                 st.markdown("---")
                 
-                # Get conversation with resource details
+                # Get conversation with resource details from Conversation_Log
                 messages = get_conversation_messages_with_resources(selected_session_id)
                 
                 if messages:
@@ -1476,9 +1515,11 @@ def display_admin_interface():
                     
                     with conv_tab2:
                         display_resource_analytics(messages)
+                else:
+                    st.warning("No messages found for this session in Conversation_Log.")
     
     with tab2:
-        # NEW: Player engagement analysis
+        # Player engagement analysis
         st.markdown("### 👥 Player Engagement Analysis")
         
         players = get_all_players()
@@ -1504,8 +1545,8 @@ def display_admin_interface():
             if selected_player_display:
                 selected_player_id = player_options[selected_player_display]
                 
-                # Get player sessions and info
-                player_sessions, player_info = get_player_sessions(selected_player_id)
+                # Get player sessions and info from Conversation_Log
+                player_sessions, player_info = get_player_sessions_from_conversation_log(selected_player_id)
                 
                 if player_sessions:
                     # Player info header
@@ -1536,14 +1577,9 @@ def display_admin_interface():
                     st.markdown("#### 🔍 View Individual Sessions")
                     session_options = {}
                     for i, session in enumerate(player_sessions):
-                        try:
-                            session_date = datetime.fromisoformat(session['first_message_time'].replace('Z', '+00:00')).strftime("%m/%d %H:%M")
-                        except:
-                            session_date = "Unknown"
-                        
                         status_emoji = "✅" if session['status'] == 'completed' else "🟡"
                         resource_info = f"📚{session['total_resources']}"
-                        display_name = f"{status_emoji} Session #{len(player_sessions)-i} | {session_date} | {session['message_count']} msgs | {resource_info}"
+                        display_name = f"{status_emoji} Session #{len(player_sessions)-i} | {session['session_id']} | {session['message_count']} msgs | {resource_info}"
                         session_options[display_name] = session['session_id']
                     
                     if session_options:
@@ -1584,7 +1620,7 @@ def display_admin_interface():
                                         </div>
                                         """, unsafe_allow_html=True)
                 else:
-                    st.warning("No sessions found for this player.")
+                    st.warning("No sessions found for this player in Conversation_Log.")
     
     # Exit admin mode
     st.markdown("---")
@@ -1660,7 +1696,15 @@ def main():
                         st.session_state.messages = [{"role": "assistant", "content": welcome_msg}]
                         
                         if st.session_state.get("player_record_id"):
+                            # DUAL LOGGING: Log welcome message to both tables
                             log_message_to_sss(
+                                st.session_state.player_record_id,
+                                session_id,
+                                0,
+                                "assistant",
+                                welcome_msg
+                            )
+                            log_message_to_conversation_log(
                                 st.session_state.player_record_id,
                                 session_id,
                                 0,
@@ -1704,9 +1748,16 @@ def main():
         
         st.session_state.message_counter += 1
         
-        # Log to SSS Active_Sessions
+        # DUAL LOGGING: Log user message to both tables
         if st.session_state.get("player_record_id"):
             log_message_to_sss(
+                st.session_state.player_record_id,
+                st.session_state.session_id,
+                st.session_state.message_counter,
+                "user",
+                prompt
+            )
+            log_message_to_conversation_log(
                 st.session_state.player_record_id,
                 st.session_state.session_id,
                 st.session_state.message_counter,
@@ -1732,9 +1783,16 @@ def main():
                     "content": intro_response
                 })
                 
-                # Log to SSS Active_Sessions
+                # DUAL LOGGING: Log intro response to both tables
                 if st.session_state.get("player_record_id"):
                     log_message_to_sss(
+                        st.session_state.player_record_id,
+                        st.session_state.session_id,
+                        st.session_state.message_counter,
+                        "assistant",
+                        intro_response
+                    )
+                    log_message_to_conversation_log(
                         st.session_state.player_record_id,
                         st.session_state.session_id,
                         st.session_state.message_counter,
@@ -1757,9 +1815,16 @@ def main():
                 "content": confirmation_msg
             })
             
-            # Log confirmation message
+            # DUAL LOGGING: Log confirmation message to both tables
             if st.session_state.get("player_record_id"):
                 log_message_to_sss(
+                    st.session_state.player_record_id,
+                    st.session_state.session_id,
+                    st.session_state.message_counter,
+                    "assistant",
+                    confirmation_msg
+                )
+                log_message_to_conversation_log(
                     st.session_state.player_record_id,
                     st.session_state.session_id,
                     st.session_state.message_counter,
@@ -1783,8 +1848,16 @@ def main():
                     "content": closing_response
                 })
                 
+                # DUAL LOGGING: Log closing response to both tables
                 if st.session_state.get("player_record_id"):
                     log_message_to_sss(
+                        st.session_state.player_record_id,
+                        st.session_state.session_id,
+                        st.session_state.message_counter,
+                        "assistant",
+                        closing_response
+                    )
+                    log_message_to_conversation_log(
                         st.session_state.player_record_id,
                         st.session_state.session_id,
                         st.session_state.message_counter,
@@ -1852,9 +1925,17 @@ def main():
                         "content": response
                     })
                     
-                    # Log to SSS Active_Sessions
+                    # DUAL LOGGING: Log coach response with chunks to both tables
                     if st.session_state.get("player_record_id"):
                         log_message_to_sss(
+                            st.session_state.player_record_id,
+                            st.session_state.session_id,
+                            st.session_state.message_counter,
+                            "assistant",
+                            response,
+                            chunks
+                        )
+                        log_message_to_conversation_log(
                             st.session_state.player_record_id,
                             st.session_state.session_id,
                             st.session_state.message_counter,
@@ -1870,9 +1951,16 @@ def main():
                     
                     st.session_state.messages.append({"role": "assistant", "content": error_msg})
                     
-                    # Log to SSS Active_Sessions
+                    # DUAL LOGGING: Log error message to both tables
                     if st.session_state.get("player_record_id"):
                         log_message_to_sss(
+                            st.session_state.player_record_id,
+                            st.session_state.session_id,
+                            st.session_state.message_counter,
+                            "assistant",
+                            error_msg
+                        )
+                        log_message_to_conversation_log(
                             st.session_state.player_record_id,
                             st.session_state.session_id,
                             st.session_state.message_counter,
