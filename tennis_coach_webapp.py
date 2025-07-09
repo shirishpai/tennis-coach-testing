@@ -656,18 +656,9 @@ def log_message_to_conversation_log(player_record_id: str, session_id: str, mess
             data["fields"]["session_id"] = [session_record_id]
         
         response = requests.post(url, headers=headers, json=data)
-        
-        # Debug logging
-        if response.status_code != 200:
-            st.error(f"Conversation_Log logging failed: {response.status_code} - {response.text}")
-            return False
-        else:
-            # Success - you can remove this debug line later
-            st.success(f"✅ Logged to Conversation_Log: {role} message #{message_order}")
-            return True
+        return response.status_code == 200
         
     except Exception as e:
-        st.error(f"Error logging to Conversation_Log: {e}")
         return False
 
 def get_player_recent_summaries(player_record_id: str, limit: int = 3) -> list:
@@ -1288,7 +1279,7 @@ def get_all_players():
         return []
 
 def get_player_sessions_from_conversation_log(player_id: str):
-    """Get all sessions for a specific player from Conversation_Log with detailed metrics"""
+    """Get all sessions for a specific player from Conversation_Log with detailed metrics - FIXED VERSION"""
     try:
         # First get player info
         player_url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Players/{player_id}"
@@ -1300,30 +1291,7 @@ def get_player_sessions_from_conversation_log(player_id: str):
         
         player_info = player_response.json().get('fields', {})
         
-        # Get all Conversation_Log records
-        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Conversation_Log"
-        params = {
-            "sort[0][field]": "log_id",
-            "sort[0][direction]": "desc",
-            "maxRecords": 1000
-        }
-        
-        response = requests.get(url, headers=headers, params=params)
-        if response.status_code != 200:
-            return [], player_info
-        
-        all_records = response.json().get('records', [])
-        
-        # Filter records for this player and group by session
-        player_sessions = {}
-        for record in all_records:
-            fields = record.get('fields', {})
-            
-            # Check if this record belongs to our player
-            # Note: We'll need to cross-reference session_id with Active_Sessions to get player_id
-            # For now, we'll use a simpler approach by getting sessions from Active_Sessions first
-            
-        # Alternative approach: Get sessions from Active_Sessions, then get details from Conversation_Log
+        # STEP 1: Get all Active_Sessions for this player to find their session_ids
         active_sessions_url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
         active_params = {
             "sort[0][field]": "timestamp",
@@ -1337,8 +1305,10 @@ def get_player_sessions_from_conversation_log(player_id: str):
             
         active_records = active_response.json().get('records', [])
         
-        # Find sessions for this player
+        # Find session_ids for this player
         player_session_ids = set()
+        session_id_to_record_id = {}  # Map session_id to Active_Sessions record_id
+        
         for record in active_records:
             fields = record.get('fields', {})
             record_player_ids = fields.get('player_id', [])
@@ -1347,18 +1317,46 @@ def get_player_sessions_from_conversation_log(player_id: str):
                 session_id = fields.get('session_id')
                 if session_id:
                     player_session_ids.add(session_id)
+                    session_id_to_record_id[session_id] = record['id']
         
-        # Now get detailed metrics from Conversation_Log for these sessions
+        if not player_session_ids:
+            return [], player_info  # No sessions found for this player
+        
+        # STEP 2: Get all Conversation_Log records
+        conv_log_url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Conversation_Log"
+        conv_params = {
+            "sort[0][field]": "log_id",
+            "sort[0][direction]": "desc",
+            "maxRecords": 1000
+        }
+        
+        conv_response = requests.get(conv_log_url, headers=headers, params=conv_params)
+        if conv_response.status_code != 200:
+            return [], player_info
+        
+        conv_records = conv_response.json().get('records', [])
+        
+        # STEP 3: Filter Conversation_Log records for this player's sessions
         session_metrics = {}
-        for record in all_records:
+        
+        for record in conv_records:
             fields = record.get('fields', {})
-            record_session_ids = fields.get('session_id', [])
+            record_session_links = fields.get('session_id', [])
             
-            for session_id in record_session_ids:
-                if session_id in player_session_ids:
-                    if session_id not in session_metrics:
-                        session_metrics[session_id] = {
-                            'session_id': session_id,
+            # Check if this conversation record links to any of our player's sessions
+            for session_link in record_session_links:
+                # session_link is the Active_Sessions record_id
+                # Find the corresponding session_id number
+                matching_session_id = None
+                for sid, rid in session_id_to_record_id.items():
+                    if rid == session_link:
+                        matching_session_id = sid
+                        break
+                
+                if matching_session_id and matching_session_id in player_session_ids:
+                    if matching_session_id not in session_metrics:
+                        session_metrics[matching_session_id] = {
+                            'session_id': matching_session_id,
                             'message_count': 0,
                             'total_resources': 0,
                             'coach_responses': 0,
@@ -1368,7 +1366,7 @@ def get_player_sessions_from_conversation_log(player_id: str):
                             'status': 'completed'
                         }
                     
-                    session = session_metrics[session_id]
+                    session = session_metrics[matching_session_id]
                     session['message_count'] += 1
                     
                     # Track message types and resources
@@ -1405,7 +1403,7 @@ def get_player_sessions_from_conversation_log(player_id: str):
         return sessions_list, player_info
         
     except Exception as e:
-        st.error(f"Error fetching player sessions from Conversation_Log: {e}")
+        st.error(f"Error fetching player sessions: {e}")
         return [], {}
 
 def display_player_engagement_analytics(sessions, player_info):
