@@ -596,6 +596,80 @@ def log_message_to_sss(player_record_id: str, session_id: str, message_order: in
     except Exception as e:
         return False
 
+def log_message_to_conversation_log(player_record_id: str, session_id: str, message_order: int, 
+                                   role: str, content: str, chunks=None) -> bool:
+    """Enhanced logging that includes resource relevance data to Conversation_Log table"""
+    try:
+        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Conversation_Log"
+        headers = {
+            "Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}",
+            "Content-Type": "application/json"
+        }
+        
+        # Process resource details if chunks provided
+        resource_count = 0
+        resource_details = ""
+        
+        if chunks and role == "assistant":
+            resource_count = len(chunks)
+            resource_details_list = []
+            for i, chunk in enumerate(chunks):
+                relevance_score = round(chunk.get('score', 0), 3)
+                source = chunk.get('source', 'Unknown')
+                topics = chunk.get('topics', 'General')
+                resource_details_list.append(
+                    f"Resource {i+1}: {relevance_score} relevance | {topics} | {source}"
+                )
+            resource_details = "\n".join(resource_details_list)
+        
+        # Get the session record ID to link to
+        # First, find the Active_Sessions record with this session_id
+        session_search_url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
+        session_id_number = int(''.join(filter(str.isdigit, session_id))) if session_id else 1
+        
+        search_params = {
+            "filterByFormula": f"{{session_id}} = {session_id_number}",
+            "maxRecords": 1
+        }
+        
+        session_response = requests.get(session_search_url, headers=headers, params=search_params)
+        session_record_id = None
+        
+        if session_response.status_code == 200:
+            session_records = session_response.json().get('records', [])
+            if session_records:
+                session_record_id = session_records[0]['id']
+        
+        # Prepare data for Conversation_Log
+        data = {
+            "fields": {
+                "message_order": message_order,
+                "role": "coach" if role == "assistant" else "player",
+                "message_content": content[:100000],
+                "coaching_resources_used": resource_count,
+                "resource_details": resource_details[:100000] if resource_details else ""
+            }
+        }
+        
+        # Add session_id link if we found the session record
+        if session_record_id:
+            data["fields"]["session_id"] = [session_record_id]
+        
+        response = requests.post(url, headers=headers, json=data)
+        
+        # Debug logging
+        if response.status_code != 200:
+            st.error(f"Conversation_Log logging failed: {response.status_code} - {response.text}")
+            return False
+        else:
+            # Success - you can remove this debug line later
+            st.success(f"✅ Logged to Conversation_Log: {role} message #{message_order}")
+            return True
+        
+    except Exception as e:
+        st.error(f"Error logging to Conversation_Log: {e}")
+        return False
+
 def get_player_recent_summaries(player_record_id: str, limit: int = 3) -> list:
     """
     Get recent summaries for a specific player - ORIGINAL WITH PLAYER FILTERING
