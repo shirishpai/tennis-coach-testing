@@ -598,7 +598,7 @@ def log_message_to_sss(player_record_id: str, session_id: str, message_order: in
 
 def log_message_to_conversation_log(player_record_id: str, session_id: str, message_order: int, 
                                    role: str, content: str, chunks=None) -> bool:
-    """Enhanced logging that includes resource relevance data to Conversation_Log table"""
+    """Enhanced logging with better session linking"""
     try:
         url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Conversation_Log"
         headers = {
@@ -622,38 +622,20 @@ def log_message_to_conversation_log(player_record_id: str, session_id: str, mess
                 )
             resource_details = "\n".join(resource_details_list)
         
-        # Get the session record ID to link to
-        # First, find the Active_Sessions record with this session_id
-        session_search_url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
+        # Convert session_id to number for easier matching
         session_id_number = int(''.join(filter(str.isdigit, session_id))) if session_id else 1
         
-        search_params = {
-            "filterByFormula": f"{{session_id}} = {session_id_number}",
-            "maxRecords": 1
-        }
-        
-        session_response = requests.get(session_search_url, headers=headers, params=search_params)
-        session_record_id = None
-        
-        if session_response.status_code == 200:
-            session_records = session_response.json().get('records', [])
-            if session_records:
-                session_record_id = session_records[0]['id']
-        
-        # Prepare data for Conversation_Log
+        # Prepare data for Conversation_Log - SIMPLIFIED without session linking
         data = {
             "fields": {
                 "message_order": message_order,
                 "role": "coach" if role == "assistant" else "player",
                 "message_content": content[:100000],
                 "coaching_resources_used": resource_count,
-                "resource_details": resource_details[:100000] if resource_details else ""
+                "resource_details": resource_details[:100000] if resource_details else "",
+                "session_number": session_id_number  # Add this for easier matching
             }
         }
-        
-        # Add session_id link if we found the session record
-        if session_record_id:
-            data["fields"]["session_id"] = [session_record_id]
         
         response = requests.post(url, headers=headers, json=data)
         return response.status_code == 200
@@ -1079,10 +1061,10 @@ def generate_dynamic_session_ending(conversation_history: list, player_name: str
 
 # REPLACE all your existing admin functions with these updated versions
 
-def simple_get_all_sessions():
-    """Get sessions with resource data from Conversation_Log - FIXED VERSION"""
+def simple_get_all_sessions_fixed():
+    """Get sessions with resource data - matches by session numbers instead of links"""
     try:
-        # STEP 1: Get all sessions from Active_Sessions for basic info
+        # STEP 1: Get basic session info from Active_Sessions
         active_url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
         headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
         active_params = {
@@ -1099,8 +1081,6 @@ def simple_get_all_sessions():
         
         # Group by session_id from Active_Sessions
         sessions = {}
-        session_to_record_id = {}  # Map session_id to Active_Sessions record_id
-        
         for record in active_records:
             fields = record.get('fields', {})
             session_id = fields.get('session_id')
@@ -1115,18 +1095,15 @@ def simple_get_all_sessions():
                         'timestamp': fields.get('timestamp', ''),
                         'status': fields.get('session_status', 'active')
                     }
-                    session_to_record_id[session_id] = record['id']
                 
                 sessions[session_id]['message_count'] += 1
                 
                 if fields.get('role') == 'coach':
                     sessions[session_id]['coach_responses'] += 1
         
-        # STEP 2: Get resource data from Conversation_Log
+        # STEP 2: Get resource data from Conversation_Log - match by session numbers
         conv_url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Conversation_Log"
         conv_params = {
-            "sort[0][field]": "log_id",
-            "sort[0][direction]": "desc",
             "maxRecords": 500
         }
         
@@ -1134,27 +1111,33 @@ def simple_get_all_sessions():
         if conv_response.status_code == 200:
             conv_records = conv_response.json().get('records', [])
             
-            # Map conversation records to sessions and add resource data
+            # Group Conversation_Log by session numbers and sum resources
+            conv_resources = {}
             for record in conv_records:
                 fields = record.get('fields', {})
-                record_session_links = fields.get('session_id', [])
                 
-                # Find which session this conversation record belongs to
-                for session_link in record_session_links:
-                    # session_link is the Active_Sessions record_id
-                    # Find the corresponding session_id number
-                    matching_session_id = None
-                    for sid, rid in session_to_record_id.items():
-                        if rid == session_link:
-                            matching_session_id = sid
-                            break
+                # Try multiple ways to identify session
+                session_num = None
+                
+                # Method 1: Look for session_number field (new records)
+                if 'session_number' in fields:
+                    session_num = fields['session_number']
+                
+                # Method 2: Try to extract from message content patterns (fallback)
+                # This is a fallback for older records
+                
+                if session_num and fields.get('role') == 'coach':
+                    if session_num not in conv_resources:
+                        conv_resources[session_num] = 0
                     
-                    if matching_session_id and matching_session_id in sessions:
-                        # Add resource data from Conversation_Log
-                        if fields.get('role') == 'coach':
-                            resources_used = fields.get('coaching_resources_used', 0)
-                            if resources_used:
-                                sessions[matching_session_id]['total_resources'] += resources_used
+                    resources_used = fields.get('coaching_resources_used', 0)
+                    if resources_used:
+                        conv_resources[session_num] += resources_used
+            
+            # Add resource data to sessions
+            for session_id, session_data in sessions.items():
+                if session_id in conv_resources:
+                    session_data['total_resources'] = conv_resources[session_id]
         
         # Calculate resource efficiency
         for session in sessions.values():
@@ -1171,6 +1154,7 @@ def simple_get_all_sessions():
     except Exception as e:
         st.error(f"Error fetching sessions: {e}")
         return []
+
 
 def get_conversation_messages_with_resources(session_id):
     """Debug version - shows what's happening with conversation retrieval"""
@@ -1544,14 +1528,14 @@ def display_player_engagement_analytics(sessions, player_info):
             with col2:
                 st.write(f"{trend_emoji} **Engagement Trend:** {'Increasing' if message_trend > 0 else 'Decreasing' if message_trend < 0 else 'Stable'}")
 
-def simple_display_admin_interface():
-    """Simplified admin interface using Active_Sessions data"""
-    st.title("🔧 Tennis Coach AI - Admin Interface (Debug Mode)")
+def simple_display_admin_interface_fixed():
+    """Admin interface using the fixed session reader"""
+    st.title("🔧 Tennis Coach AI - Admin Interface (Fixed)")
     st.markdown("### Session Management & Analytics")
     st.markdown("---")
     
-    # Get sessions from Active_Sessions (known working)
-    sessions = simple_get_all_sessions()
+    # Get sessions with fixed resource reading
+    sessions = simple_get_all_sessions_fixed()
     
     if not sessions:
         st.warning("No coaching sessions found.")
@@ -1575,7 +1559,7 @@ def simple_display_admin_interface():
         
         # Session selector
         session_options = {}
-        for session in sessions[:10]:
+        for session in sessions[:15]:
             timestamp = session['timestamp']
             try:
                 dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
@@ -1611,14 +1595,11 @@ def simple_display_admin_interface():
             
             st.markdown("---")
             
-            # Try to get conversation from Conversation_Log first
-            st.markdown("### 🔍 Debug: Conversation Retrieval")
-            messages = get_conversation_messages_with_resources(selected_session_id)
+            # Get conversation - use fallback to Active_Sessions for now since linking is broken
+            st.markdown("### 💬 Conversation")
+            messages = get_session_messages(selected_session_id)
             
             if messages:
-                st.success(f"Found {len(messages)} messages in Conversation_Log")
-                
-                st.markdown("### 💬 Conversation")
                 for msg in messages:
                     role = msg['role']
                     content = msg['content']
@@ -1634,29 +1615,7 @@ def simple_display_admin_interface():
                             with st.expander(f"📊 View {resources_used} resources"):
                                 st.text(msg['resource_details'])
             else:
-                st.warning("No messages found in Conversation_Log for this session")
-                
-                # Fallback: try Active_Sessions
-                st.markdown("### 🔄 Fallback: Trying Active_Sessions")
-                fallback_messages = get_session_messages(selected_session_id)
-                if fallback_messages:
-                    st.info(f"Found {len(fallback_messages)} messages in Active_Sessions")
-                    for msg in fallback_messages:
-                        role = msg['role']
-                        content = msg['content']
-                        resources_used = msg.get('resources_used', 0)
-                        
-                        if role == 'player':
-                            st.markdown(f"**🧑‍🎓 Player:** {content}")
-                        else:
-                            resource_indicator = f" (📚 {resources_used})" if resources_used > 0 else ""
-                            st.markdown(f"**🎾 Coach{resource_indicator}:** {content}")
-                            
-                            if resources_used > 0 and msg.get('resource_details'):
-                                with st.expander(f"📊 View {resources_used} resources"):
-                                    st.text(msg['resource_details'])
-                else:
-                    st.error("No messages found in either table!")
+                st.warning("No conversation found for this session.")
     
     # Exit admin mode
     st.markdown("---")
@@ -1674,7 +1633,7 @@ def main():
     
     # CHECK FOR ADMIN MODE FIRST
     if st.session_state.get('admin_mode', False):
-        simple_display_admin_interface()
+        simple_display_admin_interface_fixed()
         return
     
     st.title("🎾 Tennis Coach AI")
