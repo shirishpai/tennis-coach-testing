@@ -1157,6 +1157,8 @@ def simple_get_all_sessions_fixed():
 
 # ✅ PATCHED VERSION: get_conversation_messages_with_resources
 
+# ✅ PATCHED VERSION: get_conversation_messages_with_resources
+
 def get_conversation_messages_with_resources(session_id):
     """Return fully interleaved, ordered conversation for a given session_id"""
     try:
@@ -1200,19 +1202,6 @@ def get_conversation_messages_with_resources(session_id):
     except Exception as e:
         st.error(f"Exception during conversation retrieval: {e}")
         return []
-
-
-# ✅ PATCHED DROPDOWN LABEL LOGIC IN display_admin_interface()
-# Inside: session_options loop
-
-for session in sessions[:15]:
-    session_id = session['session_id']
-    status_emoji = "✅" if session['status'] == 'completed' else "🟡"
-    resource_used = session.get("total_resources", 0) > 0 or session.get("resource_details", "")
-    resource_info = "📚Yes" if resource_used else "📚No"
-    display_name = f"{status_emoji} Session {session_id} | {session['message_count']} msgs | {resource_info}"
-    session_options[display_name] = session_id
-
 
 def get_session_messages(session_id: int) -> list:
     """Fallback: Get messages from Active_Sessions"""
