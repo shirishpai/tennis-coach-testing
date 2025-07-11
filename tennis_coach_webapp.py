@@ -1079,15 +1079,16 @@ def generate_dynamic_session_ending(conversation_history: list, player_name: str
 
 # REPLACE all your existing admin functions with these updated versions
 
-def get_all_coaching_sessions():
-    """Fetch all coaching sessions with resource analytics from Conversation_Log"""
+def simple_get_all_sessions():
+    """Simplified version - get sessions directly from Active_Sessions for now"""
     try:
-        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Conversation_Log"
+        # Get from Active_Sessions (working table)
+        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
         headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
         params = {
-            "sort[0][field]": "log_id",
+            "sort[0][field]": "timestamp",
             "sort[0][direction]": "desc",
-            "maxRecords": 1000
+            "maxRecords": 100
         }
         
         response = requests.get(url, headers=headers, params=params)
@@ -1096,43 +1097,31 @@ def get_all_coaching_sessions():
         
         records = response.json().get('records', [])
         
-        # Group by session_id and calculate resource analytics
+        # Group by session_id - use Active_Sessions data for now
         sessions = {}
         for record in records:
             fields = record.get('fields', {})
-            session_ids = fields.get('session_id', [])
+            session_id = fields.get('session_id')
             
-            # Handle session_id as link field (array)
-            if isinstance(session_ids, list) and session_ids:
-                session_id = session_ids[0]  # Get first linked session
-            else:
-                continue  # Skip if no session_id
-            
-            if session_id not in sessions:
-                sessions[session_id] = {
-                    'session_id': session_id,
-                    'message_count': 0,
-                    'total_resources': 0,
-                    'coach_responses': 0,
-                    'timestamp': '',
-                    'status': 'active'  # Default status
-                }
-            
-            sessions[session_id]['message_count'] += 1
-            
-            # Track coaching resources used and get timestamp
-            role = fields.get('role')
-            if role == 'coach':
-                sessions[session_id]['coach_responses'] += 1
-                resources_used = fields.get('coaching_resources_used', 0)
-                if resources_used:
-                    sessions[session_id]['total_resources'] += resources_used
-            
-            # Update timestamp (use most recent)
-            current_timestamp = fields.get('log_id', 0)  # Using log_id as timestamp proxy
-            if current_timestamp > sessions[session_id].get('latest_log_id', 0):
-                sessions[session_id]['latest_log_id'] = current_timestamp
-                sessions[session_id]['timestamp'] = str(current_timestamp)
+            if session_id:
+                if session_id not in sessions:
+                    sessions[session_id] = {
+                        'session_id': session_id,
+                        'message_count': 0,
+                        'total_resources': 0,
+                        'coach_responses': 0,
+                        'timestamp': fields.get('timestamp', ''),
+                        'status': fields.get('session_status', 'active')
+                    }
+                
+                sessions[session_id]['message_count'] += 1
+                
+                # Use Active_Sessions resource data for now
+                if fields.get('role') == 'coach':
+                    sessions[session_id]['coach_responses'] += 1
+                    resources_used = fields.get('coaching_resources_used', 0)
+                    if resources_used:
+                        sessions[session_id]['total_resources'] += resources_used
         
         # Calculate resource efficiency
         for session in sessions.values():
@@ -1141,55 +1130,95 @@ def get_all_coaching_sessions():
             else:
                 session['resources_per_response'] = 0
         
-        # Sort by latest activity
         sessions_list = list(sessions.values())
-        sessions_list.sort(key=lambda x: x.get('latest_log_id', 0), reverse=True)
+        sessions_list.sort(key=lambda x: x['timestamp'], reverse=True)
         
         return sessions_list
         
     except Exception as e:
-        st.error(f"Error fetching sessions from Conversation_Log: {e}")
+        st.error(f"Error fetching sessions: {e}")
         return []
 
 def get_conversation_messages_with_resources(session_id):
-    """Fetch all messages for a specific session with resource details from Conversation_Log"""
+    """Debug version - shows what's happening with conversation retrieval"""
     try:
+        st.write(f"DEBUG: Looking for session_id: {session_id}")
+        
         url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Conversation_Log"
         headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
         
-        # Get all records and filter client-side (Airtable link filtering can be tricky)
         params = {
             "sort[0][field]": "message_order",
             "sort[0][direction]": "asc",
-            "maxRecords": 1000
+            "maxRecords": 100
         }
         
         response = requests.get(url, headers=headers, params=params)
+        st.write(f"DEBUG: Conversation_Log response status: {response.status_code}")
+        
         if response.status_code == 200:
             all_records = response.json().get('records', [])
+            st.write(f"DEBUG: Found {len(all_records)} total conversation records")
+            
             messages = []
+            matching_records = 0
             
             for record in all_records:
                 fields = record.get('fields', {})
                 record_session_ids = fields.get('session_id', [])
                 
-                # Check if this record belongs to our session
-                if isinstance(record_session_ids, list) and session_id in record_session_ids:
-                    messages.append({
-                        'role': fields.get('role', ''),
-                        'content': fields.get('message_content', ''),
-                        'order': fields.get('message_order', 0),
-                        'resources_used': fields.get('coaching_resources_used', 0),
-                        'resource_details': fields.get('resource_details', ''),
-                        'log_id': fields.get('log_id', 0)
-                    })
+                st.write(f"DEBUG: Record has session_ids: {record_session_ids}, looking for: {session_id}")
+                
+                # For now, let's try to match any records (we'll fix the linking later)
+                matching_records += 1
+                messages.append({
+                    'role': fields.get('role', ''),
+                    'content': fields.get('message_content', ''),
+                    'order': fields.get('message_order', 0),
+                    'resources_used': fields.get('coaching_resources_used', 0),
+                    'resource_details': fields.get('resource_details', ''),
+                    'log_id': fields.get('log_id', 0)
+                })
+            
+            st.write(f"DEBUG: Found {matching_records} matching records")
             
             # Sort by message order
             messages.sort(key=lambda x: x['order'])
             return messages
+            
+        return []
+        
+    except Exception as e:
+        st.error(f"DEBUG: Error in get_conversation_messages_with_resources: {e}")
+        return []
+
+def get_session_messages(session_id: int) -> list:
+    """Fallback: Get messages from Active_Sessions"""
+    try:
+        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
+        headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
+        params = {
+            "filterByFormula": f"{{session_id}} = {session_id}",
+            "sort[0][field]": "message_order",
+            "sort[0][direction]": "asc"
+        }
+        
+        response = requests.get(url, headers=headers, params=params)
+        if response.status_code == 200:
+            records = response.json().get('records', [])
+            messages = []
+            for record in records:
+                fields = record.get('fields', {})
+                messages.append({
+                    'role': fields.get('role', ''),
+                    'content': fields.get('message_content', ''),
+                    'order': fields.get('message_order', 0),
+                    'resources_used': fields.get('coaching_resources_used', 0),
+                    'resource_details': fields.get('resource_details', '')
+                })
+            return messages
         return []
     except Exception as e:
-        st.error(f"Error fetching conversation from Conversation_Log: {e}")
         return []
 
 def display_resource_analytics(messages):
@@ -1482,217 +1511,119 @@ def display_player_engagement_analytics(sessions, player_info):
             with col2:
                 st.write(f"{trend_emoji} **Engagement Trend:** {'Increasing' if message_trend > 0 else 'Decreasing' if message_trend < 0 else 'Stable'}")
 
-def display_admin_interface():
-    """Enhanced admin interface reading from Conversation_Log for resource analytics"""
-    st.title("🔧 Tennis Coach AI - Admin Interface")
-    st.markdown("### Session Management & Player Analytics")
+def simple_display_admin_interface():
+    """Simplified admin interface using Active_Sessions data"""
+    st.title("🔧 Tennis Coach AI - Admin Interface (Debug Mode)")
+    st.markdown("### Session Management & Analytics")
     st.markdown("---")
     
-    # Create tabs for different views
-    tab1, tab2 = st.tabs(["📊 All Sessions", "👥 Player Engagement"])
+    # Get sessions from Active_Sessions (known working)
+    sessions = simple_get_all_sessions()
     
-    with tab1:
-        # Session overview from Conversation_Log
-        sessions = get_all_coaching_sessions()
+    if not sessions:
+        st.warning("No coaching sessions found.")
+    else:
+        st.markdown(f"**Found {len(sessions)} coaching sessions:**")
         
-        if not sessions:
-            st.warning("No coaching sessions found in Conversation_Log.")
-        else:
-            st.markdown(f"**Found {len(sessions)} coaching sessions:**")
+        # Summary analytics
+        total_resources = sum(s['total_resources'] for s in sessions)
+        total_responses = sum(s['coach_responses'] for s in sessions)
+        avg_resources = total_resources / total_responses if total_responses > 0 else 0
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Sessions", len(sessions))
+        with col2:
+            st.metric("Total Resources Used", total_resources)
+        with col3:
+            st.metric("Avg Resources/Response", f"{avg_resources:.1f}")
+        
+        st.markdown("---")
+        
+        # Session selector
+        session_options = {}
+        for session in sessions[:10]:
+            timestamp = session['timestamp']
+            try:
+                dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                formatted_time = dt.strftime("%m/%d %H:%M")
+            except:
+                formatted_time = "Unknown time"
             
-            # Summary analytics
-            total_resources = sum(s['total_resources'] for s in sessions)
-            total_responses = sum(s['coach_responses'] for s in sessions)
-            avg_resources = total_resources / total_responses if total_responses > 0 else 0
+            status_emoji = "✅" if session['status'] == 'completed' else "🟡"
+            resource_info = f"📚{session['total_resources']}"
+            display_name = f"{status_emoji} Session {session['session_id']} | {session['message_count']} msgs | {resource_info} | {formatted_time}"
+            session_options[display_name] = session['session_id']
+        
+        selected_display = st.selectbox(
+            "🎾 Select Session to Analyze",
+            options=list(session_options.keys()),
+            help="Choose a session to view conversation and resource analytics"
+        )
+        
+        if selected_display:
+            selected_session_id = session_options[selected_display]
+            session_info = next(s for s in sessions if s['session_id'] == selected_session_id)
             
-            col1, col2, col3 = st.columns(3)
+            # Display session metrics
+            col1, col2, col3, col4 = st.columns(4)
             with col1:
-                st.metric("Total Sessions", len(sessions))
+                st.metric("Session ID", session_info['session_id'])
             with col2:
-                st.metric("Total Resources Used", total_resources)
+                st.metric("Messages", session_info['message_count'])
             with col3:
-                st.metric("Avg Resources/Response", f"{avg_resources:.1f}")
+                st.metric("Resources Used", session_info['total_resources'])
+            with col4:
+                st.metric("Resources/Response", session_info['resources_per_response'])
             
             st.markdown("---")
             
-            # Session selector
-            session_options = {}
-            for session in sessions[:15]:
-                session_id = session['session_id']
-                status_emoji = "✅" if session['status'] == 'completed' else "🟡"
-                resource_info = f"📚{session['total_resources']}"
-                display_name = f"{status_emoji} Session {session_id} | {session['message_count']} msgs | {resource_info}"
-                session_options[display_name] = session_id
+            # Try to get conversation from Conversation_Log first
+            st.markdown("### 🔍 Debug: Conversation Retrieval")
+            messages = get_conversation_messages_with_resources(selected_session_id)
             
-            selected_display = st.selectbox(
-                "🎾 Select Session to Analyze",
-                options=list(session_options.keys()),
-                help="Choose a session to view conversation and resource analytics"
-            )
-            
-            if selected_display:
-                selected_session_id = session_options[selected_display]
-                session_info = next(s for s in sessions if s['session_id'] == selected_session_id)
+            if messages:
+                st.success(f"Found {len(messages)} messages in Conversation_Log")
                 
-                # Display session metrics
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    st.metric("Session ID", session_info['session_id'])
-                with col2:
-                    st.metric("Messages", session_info['message_count'])
-                with col3:
-                    st.metric("Resources Used", session_info['total_resources'])
-                with col4:
-                    st.metric("Resources/Response", session_info['resources_per_response'])
-                
-                st.markdown("---")
-                
-                # Get conversation with resource details from Conversation_Log
-                messages = get_conversation_messages_with_resources(selected_session_id)
-                
-                if messages:
-                    # Create tabs for different views
-                    conv_tab1, conv_tab2 = st.tabs(["💬 Conversation", "📊 Resource Analytics"])
+                st.markdown("### 💬 Conversation")
+                for msg in messages:
+                    role = msg['role']
+                    content = msg['content']
+                    resources_used = msg.get('resources_used', 0)
                     
-                    with conv_tab1:
-                        st.markdown("### Conversation Log")
-                        for msg in messages:
-                            role = msg['role']
-                            content = msg['content']
-                            resources_used = msg.get('resources_used', 0)
-                            
-                            if role == 'player':
-                                st.markdown(f"""
-                                <div style="display: flex; justify-content: flex-start; margin: 10px 0;">
-                                    <div style="background-color: #E3F2FD; padding: 10px 15px; border-radius: 18px; max-width: 70%; border: 1px solid #BBDEFB;">
-                                        <strong>🧑‍🎓 Player:</strong><br>
-                                        {content}
-                                    </div>
-                                </div>
-                                """, unsafe_allow_html=True)
-                            else:  # coach
-                                resource_indicator = f" 📚 {resources_used}" if resources_used > 0 else ""
-                                st.markdown(f"""
-                                <div style="display: flex; justify-content: flex-end; margin: 10px 0;">
-                                    <div style="background-color: #E8F5E8; padding: 10px 15px; border-radius: 18px; max-width: 70%; border: 1px solid #C8E6C9;">
-                                        <strong>🎾 Coach TA:</strong>{resource_indicator}<br>
-                                        {content}
-                                    </div>
-                                </div>
-                                """, unsafe_allow_html=True)
-                                
-                                if resources_used > 0 and msg.get('resource_details'):
-                                    with st.expander(f"📊 View {resources_used} coaching resources"):
-                                        st.text(msg['resource_details'])
-                    
-                    with conv_tab2:
-                        display_resource_analytics(messages)
-                else:
-                    st.warning("No messages found for this session in Conversation_Log.")
-    
-    with tab2:
-        # Player engagement analysis
-        st.markdown("### 👥 Player Engagement Analysis")
-        
-        players = get_all_players()
-        
-        if not players:
-            st.warning("No players found in the database.")
-        else:
-            # Player selector
-            player_options = {}
-            for player in players:
-                name = player['name'] if player['name'] != 'Unknown' else player['email'].split('@')[0]
-                level = player['tennis_level']
-                sessions_count = player['total_sessions']
-                display_name = f"{name} ({level}) - {sessions_count} sessions"
-                player_options[display_name] = player['player_id']
-            
-            selected_player_display = st.selectbox(
-                "🧑‍🎓 Select Player to Analyze",
-                options=list(player_options.keys()),
-                help="Choose a player to view their complete engagement history"
-            )
-            
-            if selected_player_display:
-                selected_player_id = player_options[selected_player_display]
-                
-                # Get player sessions and info from Conversation_Log
-                player_sessions, player_info = get_player_sessions_from_conversation_log(selected_player_id)
-                
-                if player_sessions:
-                    # Player info header
-                    st.markdown("#### 🧑‍🎓 Player Profile")
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        st.write(f"**Name:** {player_info.get('name', 'Unknown')}")
-                        st.write(f"**Email:** {player_info.get('email', 'Unknown')}")
-                    with col2:
-                        st.write(f"**Tennis Level:** {player_info.get('tennis_level', 'Not specified')}")
-                        st.write(f"**Status:** {player_info.get('player_status', 'Unknown')}")
-                    with col3:
-                        try:
-                            first_session = datetime.fromisoformat(player_info.get('first_session_date', '').replace('Z', '+00:00')).strftime("%m/%d/%Y")
-                        except:
-                            first_session = "Unknown"
-                        st.write(f"**First Session:** {first_session}")
-                        st.write(f"**Total Sessions:** {player_info.get('total_sessions', 0)}")
-                    
-                    st.markdown("---")
-                    
-                    # Player engagement analytics
-                    display_player_engagement_analytics(player_sessions, player_info)
-                    
-                    st.markdown("---")
-                    
-                    # Individual session selector for this player
-                    st.markdown("#### 🔍 View Individual Sessions")
-                    session_options = {}
-                    for i, session in enumerate(player_sessions):
-                        status_emoji = "✅" if session['status'] == 'completed' else "🟡"
-                        resource_info = f"📚{session['total_resources']}"
-                        display_name = f"{status_emoji} Session #{len(player_sessions)-i} | {session['session_id']} | {session['message_count']} msgs | {resource_info}"
-                        session_options[display_name] = session['session_id']
-                    
-                    if session_options:
-                        selected_session_display = st.selectbox(
-                            "Select a session to view details:",
-                            options=list(session_options.keys()),
-                            key="player_session_selector"
-                        )
+                    if role == 'player':
+                        st.markdown(f"**🧑‍🎓 Player:** {content}")
+                    else:  # coach
+                        resource_indicator = f" (📚 {resources_used})" if resources_used > 0 else ""
+                        st.markdown(f"**🎾 Coach{resource_indicator}:** {content}")
                         
-                        if selected_session_display:
-                            selected_session_id = session_options[selected_session_display]
-                            messages = get_conversation_messages_with_resources(selected_session_id)
+                        if resources_used > 0 and msg.get('resource_details'):
+                            with st.expander(f"📊 View {resources_used} resources"):
+                                st.text(msg['resource_details'])
+            else:
+                st.warning("No messages found in Conversation_Log for this session")
+                
+                # Fallback: try Active_Sessions
+                st.markdown("### 🔄 Fallback: Trying Active_Sessions")
+                fallback_messages = get_session_messages(selected_session_id)
+                if fallback_messages:
+                    st.info(f"Found {len(fallback_messages)} messages in Active_Sessions")
+                    for msg in fallback_messages:
+                        role = msg['role']
+                        content = msg['content']
+                        resources_used = msg.get('resources_used', 0)
+                        
+                        if role == 'player':
+                            st.markdown(f"**🧑‍🎓 Player:** {content}")
+                        else:
+                            resource_indicator = f" (📚 {resources_used})" if resources_used > 0 else ""
+                            st.markdown(f"**🎾 Coach{resource_indicator}:** {content}")
                             
-                            if messages:
-                                st.markdown("##### 💬 Session Conversation")
-                                for msg in messages:
-                                    role = msg['role']
-                                    content = msg['content']
-                                    resources_used = msg.get('resources_used', 0)
-                                    
-                                    if role == 'player':
-                                        st.markdown(f"""
-                                        <div style="display: flex; justify-content: flex-start; margin: 10px 0;">
-                                            <div style="background-color: #E3F2FD; padding: 10px 15px; border-radius: 18px; max-width: 70%; border: 1px solid #BBDEFB;">
-                                                <strong>🧑‍🎓 Player:</strong><br>
-                                                {content}
-                                            </div>
-                                        </div>
-                                        """, unsafe_allow_html=True)
-                                    else:  # coach
-                                        resource_indicator = f" 📚 {resources_used}" if resources_used > 0 else ""
-                                        st.markdown(f"""
-                                        <div style="display: flex; justify-content: flex-end; margin: 10px 0;">
-                                            <div style="background-color: #E8F5E8; padding: 10px 15px; border-radius: 18px; max-width: 70%; border: 1px solid #C8E6C9;">
-                                                <strong>🎾 Coach TA:</strong>{resource_indicator}<br>
-                                                {content}
-                                            </div>
-                                        </div>
-                                        """, unsafe_allow_html=True)
+                            if resources_used > 0 and msg.get('resource_details'):
+                                with st.expander(f"📊 View {resources_used} resources"):
+                                    st.text(msg['resource_details'])
                 else:
-                    st.warning("No sessions found for this player in Conversation_Log.")
+                    st.error("No messages found in either table!")
     
     # Exit admin mode
     st.markdown("---")
