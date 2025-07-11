@@ -1641,7 +1641,7 @@ def main():
     
     # CHECK FOR ADMIN MODE FIRST
     if st.session_state.get('admin_mode', False):
-        display_admin_interface()
+        simple_display_admin_interface()
         return
     
     st.title("🎾 Tennis Coach AI")
