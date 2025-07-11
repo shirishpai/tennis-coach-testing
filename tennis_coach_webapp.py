@@ -1157,51 +1157,71 @@ def simple_get_all_sessions_fixed():
 
 # ✅ PATCHED VERSION: get_conversation_messages_with_resources
 
-# ✅ PATCHED VERSION: get_conversation_messages_with_resources
-
 def get_conversation_messages_with_resources(session_id):
-    """Return fully interleaved, ordered conversation for a given session_id"""
+    """Fetch all messages for a given session from Conversation_Log, using linked record matching."""
     try:
-        url = "https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Conversation_Log"
-        headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}", "Content-Type": "application/json"}
-        params = {
-            "maxRecords": 1000,
-            "sort[0][field]": "message_order",
-            "sort[0][direction]": "asc"
-        }
+        # Step 1: Get all Active_Sessions to build session_id → record_id map
+        active_url = "https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
+        headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
+        active_params = {"maxRecords": 500}
 
-        response = requests.get(url, headers=headers, params=params)
-        if response.status_code != 200:
-            st.error("Error fetching messages from Airtable.")
+        active_response = requests.get(active_url, headers=headers, params=active_params)
+        if active_response.status_code != 200:
+            st.error("Failed to fetch Active_Sessions")
             return []
 
-        all_records = response.json().get("records", [])
+        active_records = active_response.json().get('records', [])
+        session_id_to_record_id = {}
+
+        for record in active_records:
+            fields = record.get('fields', {})
+            sid = fields.get('session_id')
+            if sid:
+                session_id_to_record_id[str(sid)] = record['id']  # store as string for safety
+
+        if str(session_id) not in session_id_to_record_id:
+            st.warning("Session ID not found in Active_Sessions.")
+            return []
+
+        target_record_id = session_id_to_record_id[str(session_id)]
+
+        # Step 2: Get all Conversation_Log entries
+        conv_url = "https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Conversation_Log"
+        conv_params = {
+            "sort[0][field]": "message_order",
+            "sort[0][direction]": "asc",
+            "maxRecords": 1000
+        }
+
+        conv_response = requests.get(conv_url, headers=headers, params=conv_params)
+        if conv_response.status_code != 200:
+            st.error("Failed to fetch Conversation_Log")
+            return []
+
+        conv_records = conv_response.json().get('records', [])
         messages = []
 
-        for record in all_records:
-            fields = record.get("fields", {})
-            linked_session_ids = fields.get("session_id", [])
-
-            if not isinstance(linked_session_ids, list):
-                linked_session_ids = [linked_session_ids]
-
-            if session_id in linked_session_ids:
+        for record in conv_records:
+            fields = record.get('fields', {})
+            linked_sessions = fields.get('session_id', [])
+            if target_record_id in linked_sessions:
                 messages.append({
-                    "role": fields.get("role", ""),
-                    "content": fields.get("message_content", ""),
-                    "message_order": fields.get("message_order", 0),
-                    "resources_used": fields.get("coaching_resources_used", 0),
-                    "resource_details": fields.get("resource_details", ""),
-                    "log_id": fields.get("log_id", 0),
+                    'role': fields.get('role', ''),
+                    'content': fields.get('message_content', ''),
+                    'order': fields.get('message_order', 0),
+                    'resources_used': fields.get('coaching_resources_used', 0),
+                    'resource_details': fields.get('resource_details', ''),
+                    'log_id': fields.get('log_id', 0)
                 })
 
-        # Sort strictly by message_order (convert to int to avoid string sorting bugs)
-        messages.sort(key=lambda m: int(m.get("message_order", 0)))
+        # Sort messages just in case
+        messages.sort(key=lambda x: x['order'])
         return messages
 
     except Exception as e:
-        st.error(f"Exception during conversation retrieval: {e}")
+        st.error(f"Error fetching conversation messages: {e}")
         return []
+
 
 def get_session_messages(session_id: int) -> list:
     """Fallback: Get messages from Active_Sessions"""
