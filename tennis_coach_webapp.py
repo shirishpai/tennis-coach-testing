@@ -1155,59 +1155,64 @@ def simple_get_all_sessions_fixed():
         st.error(f"Error fetching sessions: {e}")
         return []
 
+# ✅ PATCHED VERSION: get_conversation_messages_with_resources
 
 def get_conversation_messages_with_resources(session_id):
-    """Debug version - shows what's happening with conversation retrieval"""
+    """Return fully interleaved, ordered conversation for a given session_id"""
     try:
-        st.write(f"DEBUG: Looking for session_id: {session_id}")
-        
-        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Conversation_Log"
-        headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
-        
+        url = "https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Conversation_Log"
+        headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}", "Content-Type": "application/json"}
         params = {
+            "maxRecords": 1000,
             "sort[0][field]": "message_order",
-            "sort[0][direction]": "asc",
-            "maxRecords": 100
+            "sort[0][direction]": "asc"
         }
-        
+
         response = requests.get(url, headers=headers, params=params)
-        st.write(f"DEBUG: Conversation_Log response status: {response.status_code}")
-        
-        if response.status_code == 200:
-            all_records = response.json().get('records', [])
-            st.write(f"DEBUG: Found {len(all_records)} total conversation records")
-            
-            messages = []
-            matching_records = 0
-            
-            for record in all_records:
-                fields = record.get('fields', {})
-                record_session_ids = fields.get('session_id', [])
-                
-                st.write(f"DEBUG: Record has session_ids: {record_session_ids}, looking for: {session_id}")
-                
-                # For now, let's try to match any records (we'll fix the linking later)
-                matching_records += 1
+        if response.status_code != 200:
+            st.error("Error fetching messages from Airtable.")
+            return []
+
+        all_records = response.json().get("records", [])
+        messages = []
+
+        for record in all_records:
+            fields = record.get("fields", {})
+            linked_session_ids = fields.get("session_id", [])
+
+            if not isinstance(linked_session_ids, list):
+                linked_session_ids = [linked_session_ids]
+
+            if session_id in linked_session_ids:
                 messages.append({
-                    'role': fields.get('role', ''),
-                    'content': fields.get('message_content', ''),
-                    'order': fields.get('message_order', 0),
-                    'resources_used': fields.get('coaching_resources_used', 0),
-                    'resource_details': fields.get('resource_details', ''),
-                    'log_id': fields.get('log_id', 0)
+                    "role": fields.get("role", ""),
+                    "content": fields.get("message_content", ""),
+                    "message_order": fields.get("message_order", 0),
+                    "resources_used": fields.get("coaching_resources_used", 0),
+                    "resource_details": fields.get("resource_details", ""),
+                    "log_id": fields.get("log_id", 0),
                 })
-            
-            st.write(f"DEBUG: Found {matching_records} matching records")
-            
-            # Sort by message order
-            messages.sort(key=lambda x: x['order'])
-            return messages
-            
-        return []
-        
+
+        # Sort strictly by message_order (convert to int to avoid string sorting bugs)
+        messages.sort(key=lambda m: int(m.get("message_order", 0)))
+        return messages
+
     except Exception as e:
-        st.error(f"DEBUG: Error in get_conversation_messages_with_resources: {e}")
+        st.error(f"Exception during conversation retrieval: {e}")
         return []
+
+
+# ✅ PATCHED DROPDOWN LABEL LOGIC IN display_admin_interface()
+# Inside: session_options loop
+
+for session in sessions[:15]:
+    session_id = session['session_id']
+    status_emoji = "✅" if session['status'] == 'completed' else "🟡"
+    resource_used = session.get("total_resources", 0) > 0 or session.get("resource_details", "")
+    resource_info = "📚Yes" if resource_used else "📚No"
+    display_name = f"{status_emoji} Session {session_id} | {session['message_count']} msgs | {resource_info}"
+    session_options[display_name] = session_id
+
 
 def get_session_messages(session_id: int) -> list:
     """Fallback: Get messages from Active_Sessions"""
@@ -1597,9 +1602,11 @@ def display_admin_interface():
             for session in sessions[:15]:
                 session_id = session['session_id']
                 status_emoji = "✅" if session['status'] == 'completed' else "🟡"
-                resource_info = "📚Yes" if session['total_resources'] > 0 else "📚No"
+                resource_used = session.get("total_resources", 0) > 0 or session.get("resource_details", "")
+                resource_info = "📚Yes" if resource_used else "📚No"
                 display_name = f"{status_emoji} Session {session_id} | {session['message_count']} msgs | {resource_info}"
                 session_options[display_name] = session_id
+
 
             selected_display = st.selectbox(
                 "🎾 Select Session to Analyze",
