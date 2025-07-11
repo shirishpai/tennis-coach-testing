@@ -1562,40 +1562,6 @@ def display_conversation_tab(messages):
                 with st.expander("📊 View Resources"):
                     st.text(resource_details or "No details provided.")
 
-def display_conversation_tab(messages):
-    """Render the conversation with resource detail expanders."""
-    st.markdown("### Conversation Log")
-
-    for msg in messages:
-        role = msg.get('role', '')
-        content = msg.get('content', '')
-        resources_used = msg.get('resources_used', 0)
-        resource_details = msg.get('resource_details', '')
-
-        if role == 'player':
-            st.markdown(f"""
-            <div style="display: flex; justify-content: flex-start; margin: 10px 0;">
-                <div style="background-color: #E3F2FD; padding: 10px 15px; border-radius: 18px; max-width: 70%; border: 1px solid #BBDEFB;">
-                    <strong>🧑‍🎓 Player:</strong><br>
-                    {content}
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        elif role == 'coach':
-            st.markdown(f"""
-            <div style="display: flex; justify-content: flex-end; margin: 10px 0;">
-                <div style="background-color: #E8F5E8; padding: 10px 15px; border-radius: 18px; max-width: 70%; border: 1px solid #C8E6C9;">
-                    <strong>🎾 Coach TA:</strong> {"📚 " + str(resources_used) if resources_used else ""}<br>
-                    {content}
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-            if resource_details:
-                with st.expander("📊 View Resources"):
-                    st.text(resource_details or "No details provided.")
-
 def display_admin_interface():
     """Enhanced admin interface reading from Conversation_Log for resource analytics"""
     st.title("🔧 Tennis Coach AI - Admin Interface")
@@ -1605,7 +1571,8 @@ def display_admin_interface():
     tab1, tab2 = st.tabs(["📊 All Sessions", "👥 Player Engagement"])
 
     with tab1:
-        sessions = get_all_coaching_sessions()
+        sessions = simple_get_all_sessions_fixed()
+
 
         if not sessions:
             st.warning("No coaching sessions found in Conversation_Log.")
