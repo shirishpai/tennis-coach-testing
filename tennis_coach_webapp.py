@@ -1080,26 +1080,28 @@ def generate_dynamic_session_ending(conversation_history: list, player_name: str
 # REPLACE all your existing admin functions with these updated versions
 
 def simple_get_all_sessions():
-    """Simplified version - get sessions directly from Active_Sessions for now"""
+    """Get sessions with resource data from Conversation_Log - FIXED VERSION"""
     try:
-        # Get from Active_Sessions (working table)
-        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
+        # STEP 1: Get all sessions from Active_Sessions for basic info
+        active_url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
         headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
-        params = {
+        active_params = {
             "sort[0][field]": "timestamp",
             "sort[0][direction]": "desc",
-            "maxRecords": 100
+            "maxRecords": 200
         }
         
-        response = requests.get(url, headers=headers, params=params)
-        if response.status_code != 200:
+        active_response = requests.get(active_url, headers=headers, params=active_params)
+        if active_response.status_code != 200:
             return []
         
-        records = response.json().get('records', [])
+        active_records = active_response.json().get('records', [])
         
-        # Group by session_id - use Active_Sessions data for now
+        # Group by session_id from Active_Sessions
         sessions = {}
-        for record in records:
+        session_to_record_id = {}  # Map session_id to Active_Sessions record_id
+        
+        for record in active_records:
             fields = record.get('fields', {})
             session_id = fields.get('session_id')
             
@@ -1113,15 +1115,46 @@ def simple_get_all_sessions():
                         'timestamp': fields.get('timestamp', ''),
                         'status': fields.get('session_status', 'active')
                     }
+                    session_to_record_id[session_id] = record['id']
                 
                 sessions[session_id]['message_count'] += 1
                 
-                # Use Active_Sessions resource data for now
                 if fields.get('role') == 'coach':
                     sessions[session_id]['coach_responses'] += 1
-                    resources_used = fields.get('coaching_resources_used', 0)
-                    if resources_used:
-                        sessions[session_id]['total_resources'] += resources_used
+        
+        # STEP 2: Get resource data from Conversation_Log
+        conv_url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Conversation_Log"
+        conv_params = {
+            "sort[0][field]": "log_id",
+            "sort[0][direction]": "desc",
+            "maxRecords": 500
+        }
+        
+        conv_response = requests.get(conv_url, headers=headers, params=conv_params)
+        if conv_response.status_code == 200:
+            conv_records = conv_response.json().get('records', [])
+            
+            # Map conversation records to sessions and add resource data
+            for record in conv_records:
+                fields = record.get('fields', {})
+                record_session_links = fields.get('session_id', [])
+                
+                # Find which session this conversation record belongs to
+                for session_link in record_session_links:
+                    # session_link is the Active_Sessions record_id
+                    # Find the corresponding session_id number
+                    matching_session_id = None
+                    for sid, rid in session_to_record_id.items():
+                        if rid == session_link:
+                            matching_session_id = sid
+                            break
+                    
+                    if matching_session_id and matching_session_id in sessions:
+                        # Add resource data from Conversation_Log
+                        if fields.get('role') == 'coach':
+                            resources_used = fields.get('coaching_resources_used', 0)
+                            if resources_used:
+                                sessions[matching_session_id]['total_resources'] += resources_used
         
         # Calculate resource efficiency
         for session in sessions.values():
