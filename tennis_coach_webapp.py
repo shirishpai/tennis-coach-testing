@@ -598,7 +598,7 @@ def log_message_to_sss(player_record_id: str, session_id: str, message_order: in
 
 def log_message_to_conversation_log(player_record_id: str, session_id: str, message_order: int, 
                                    role: str, content: str, chunks=None) -> bool:
-    """Enhanced logging with better session linking"""
+    """Enhanced logging with correct session_id linking to Active_Sessions"""
     try:
         url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Conversation_Log"
         headers = {
@@ -622,10 +622,10 @@ def log_message_to_conversation_log(player_record_id: str, session_id: str, mess
                 )
             resource_details = "\n".join(resource_details_list)
         
-        # Convert session_id to number for easier matching
+        # Convert session_id to number for readability
         session_id_number = int(''.join(filter(str.isdigit, session_id))) if session_id else 1
-        
-        # Prepare data for Conversation_Log - SIMPLIFIED without session linking
+
+        # ✅ Final payload with correct linking to Active_Sessions
         data = {
             "fields": {
                 "message_order": message_order,
@@ -633,7 +633,8 @@ def log_message_to_conversation_log(player_record_id: str, session_id: str, mess
                 "message_content": content[:100000],
                 "coaching_resources_used": resource_count,
                 "resource_details": resource_details[:100000] if resource_details else "",
-                "session_number": session_id_number  # Add this for easier matching
+                "session_number": session_id_number,
+                "session_id": [session_id]  # ✅ Must be a list to link properly in Airtable
             }
         }
         
@@ -642,6 +643,7 @@ def log_message_to_conversation_log(player_record_id: str, session_id: str, mess
         
     except Exception as e:
         return False
+
 
 def get_player_recent_summaries(player_record_id: str, limit: int = 3) -> list:
     """
