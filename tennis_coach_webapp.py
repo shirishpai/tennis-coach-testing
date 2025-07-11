@@ -1624,6 +1624,7 @@ def display_admin_interface():
                 st.markdown("---")
 
                 messages = get_conversation_messages_with_resources(selected_session_id)
+                messages.sort(key=lambda x: x.get('message_order', 0))
 
                 if messages:
                     conv_tab1, conv_tab2 = st.tabs(["💬 Conversation", "📊 Resource Analytics"])
