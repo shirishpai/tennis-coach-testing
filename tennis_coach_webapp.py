@@ -1597,7 +1597,7 @@ def display_admin_interface():
             for session in sessions[:15]:
                 session_id = session['session_id']
                 status_emoji = "✅" if session['status'] == 'completed' else "🟡"
-                resource_info = f"📚{session['total_resources']}"
+                resource_info = "📚Yes" if session['total_resources'] > 0 else "📚No"
                 display_name = f"{status_emoji} Session {session_id} | {session['message_count']} msgs | {resource_info}"
                 session_options[display_name] = session_id
 
