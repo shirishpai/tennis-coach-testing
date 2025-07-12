@@ -597,13 +597,14 @@ def check_and_send_followup_message():
     return False, None
 
 def handle_user_response_during_timer():
-    """Handle when user responds before the 5-second timer"""
+    """Handle when user responds before the 5-second timer - COMPLETELY DISABLE TIMER"""
     if st.session_state.get('pending_followup') and not st.session_state.get('followup_sent'):
         followup_msg = st.session_state.pending_followup
         
-        # Mark as sent and clear pending
+        # CRITICAL: Mark as sent AND clear all timer state to prevent automatic sending
         st.session_state.followup_sent = True
         st.session_state.pending_followup = None
+        st.session_state.followup_timer_start = 0  # Clear timer completely
         
         return True, followup_msg
     
