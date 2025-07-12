@@ -1949,7 +1949,7 @@ def display_player_engagement_analytics(sessions, player_info):
             with col2:
                 st.write(f"{trend_emoji} **Engagement Trend:** {'Increasing' if message_trend > 0 else 'Decreasing' if message_trend < 0 else 'Stable'}")
 
-def display_admin_interface():
+def display_admin_interface(index, claude_client):
     """Enhanced admin interface reading from Active_Sessions for resource analytics"""
     st.title("🔧 Tennis Coach AI - Admin Interface")
     st.markdown("### Session Management & Player Analytics")
@@ -2217,7 +2217,7 @@ def main():
     
     # CHECK FOR ADMIN MODE FIRST
     if st.session_state.get('admin_mode', False):
-        display_admin_interface()
+        display_admin_interface(index, claude_client)
         return
     
     st.title("🎾 Tennis Coach AI")
