@@ -784,7 +784,30 @@ Keep responses SHORT (1-2 sentences max). Be enthusiastic but concise."""
                 role = "Player" if msg['role'] == 'user' else "Coach TA"
                 history_text += f"{role}: {msg['content']}\n"
         
-        context_text = "\n\n".join([chunk.get('text', '') for chunk in context_chunks if chunk.get('text')])
+        # Clean context chunks of debug text
+        cleaned_chunks = []
+        for chunk in context_chunks:
+            if chunk.get('text'):
+                content_text = chunk.get('text', '')
+                
+                # Remove debug patterns
+                debug_patterns = [
+                    "Wait for player response before giving specific drill instruction",
+                    "PATTERN 1", "PATTERN 2", "PATTERN 3",
+                    "Internal note:", "Coach instruction:",
+                    "DEBUG:", "Note to coach:", "Meta-commentary:",
+                    "[Debug]", "[Internal]", "Coach note:",
+                    "Wait for", "Before giving specific"
+                ]
+                
+                for pattern in debug_patterns:
+                    content_text = content_text.replace(pattern, "").strip()
+                
+                # Only include if there's meaningful content left
+                if len(content_text.strip()) > 10:
+                    cleaned_chunks.append(content_text)
+
+        context_text = "\n\n".join(cleaned_chunks)
         
         return f"""{intro_prompt}
 {history_text}
@@ -837,7 +860,30 @@ Just give direct coaching advice."""
                 role = "Player" if msg['role'] == 'user' else "Coach TA"
                 history_text += f"{role}: {msg['content']}\n"
         
-        context_text = "\n\n".join([chunk.get('text', '') for chunk in context_chunks if chunk.get('text')])
+        # Clean context chunks of debug text
+        cleaned_chunks = []
+        for chunk in context_chunks:
+            if chunk.get('text'):
+                content_text = chunk.get('text', '')
+                
+                # Remove debug patterns
+                debug_patterns = [
+                    "Wait for player response before giving specific drill instruction",
+                    "PATTERN 1", "PATTERN 2", "PATTERN 3",
+                    "Internal note:", "Coach instruction:",
+                    "DEBUG:", "Note to coach:", "Meta-commentary:",
+                    "[Debug]", "[Internal]", "Coach note:",
+                    "Wait for", "Before giving specific"
+                ]
+                
+                for pattern in debug_patterns:
+                    content_text = content_text.replace(pattern, "").strip()
+                
+                # Only include if there's meaningful content left
+                if len(content_text.strip()) > 10:
+                    cleaned_chunks.append(content_text)
+
+        context_text = "\n\n".join(cleaned_chunks)
         
         return f"""{coaching_prompt}
 {history_text}
