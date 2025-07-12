@@ -2116,7 +2116,8 @@ def display_admin_interface():
 
                         conv_tab1, conv_tab2 = st.tabs(["💬 Conversation", "📊 Resource Analytics"])
                         with conv_tab1:
-                            
+                            display_conversation_tab(messages)
+
                         with conv_tab2:
                             display_resource_analytics(messages)
                     else:
@@ -2168,7 +2169,6 @@ def display_admin_interface():
                 st.caption("✅ If both are good, mark the no-context answer as better (less effort).")
             else:
                 st.warning("Please enter a user query to compare.")
-
 
 def main():
     st.set_page_config(
