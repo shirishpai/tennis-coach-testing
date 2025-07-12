@@ -2489,87 +2489,83 @@ def main():
                     st.rerun()
                 return
         
-        # Normal message processing (not ending)
+        # CLAUDE-ONLY COACHING MODE (NO PINECONE)
         with st.chat_message("assistant"):
             with st.spinner("Coach is thinking..."):
-                # TEMPORARILY BYPASS PINECONE - USE CLAUDE ONLY
-                chunks = []  # Empty chunks = no RAG context
-
                 coaching_history = st.session_state.get('coaching_history', [])
-
+                
                 # Get current player info from database
                 player_name, player_level = get_current_player_info(st.session_state.get("player_record_id", ""))
+                
+                # Build conversation context
+                recent_conversation = ""
+                if len(st.session_state.messages) > 1:
+                    recent_conversation = "\nRecent conversation:\n"
+                    for msg in st.session_state.messages[-6:]:  # Last 6 messages
+                        role = "Player" if msg['role'] == 'user' else "Coach TA"
+                        recent_conversation += f"{role}: {msg['content']}\n"
+                
+                # Add previous session context if available
+                session_context = ""
+                if coaching_history and len(coaching_history) > 0:
+                    last_session = coaching_history[0]
+                    if last_session.get('technical_focus'):
+                        session_context = f"\nPrevious session focus: {last_session['technical_focus']}"
+                
+                # Claude-only prompt (no Pinecone chunks)
+                claude_only_prompt = f"""You are Coach TA, a professional tennis coach providing remote coaching advice through chat.
 
-                # Build prompt without Pinecone chunks
-                claude_only_prompt = f"""You are Coach TA, a professional tennis coach providing remote coaching advice.
+Player: {player_name or 'the player'} (Level: {player_level or 'beginner'})
 
-                Player: {player_name or 'the player'} (Level: {player_level or 'general'})
+COACHING APPROACH:
+- Give direct, actionable tennis advice
+- Ask 1-2 follow-up questions about their specific situation  
+- End with encouragement like "How does that sound?" or "Ready to try this?"
+- Keep responses SHORT (2-3 sentences total)
+- Focus on technique, solo drills, or mental game advice
+- Be encouraging and supportive
+- Remember you're coaching remotely - focus on what they can practice alone
 
-                COACHING APPROACH:
-                - Give direct, actionable tennis advice
-                - Ask 1-2 follow-up questions about their specific situation  
-                - End with encouragement and next steps
-                - Keep responses SHORT (2-3 sentences)
-                - Focus on technique, drills, or mental game
-                - Remember you're coaching remotely
+MEMORY RULES:
+- NEVER ask about their level - you know they are {player_level or 'a beginner'}
+- NEVER ask their name - you are coaching {player_name or 'this player'}
+- Remember what you've discussed in this session
 
-                Player question: "{prompt}"
+{session_context}{recent_conversation}
 
-                Provide direct coaching advice:"""
+Player question: "{prompt}"
+
+Provide direct coaching advice:"""
 
                 response = query_claude(claude_client, claude_only_prompt)
-                    
-                    st.markdown(response)
-                    
-                    st.session_state.message_counter += 1
-                    
-                    st.session_state.messages.append({
-                        "role": "assistant", 
-                        "content": response
-                    })
-                    
-                    # DUAL LOGGING: Log coach response with chunks to both tables
-                    if st.session_state.get("player_record_id"):
-                        log_message_to_sss(
-                            st.session_state.player_record_id,
-                            st.session_state.session_id,
-                            st.session_state.message_counter,
-                            "assistant",
-                            response,
-                            chunks
-                        )
-                        log_message_to_conversation_log(
-                            st.session_state.player_record_id,
-                            st.session_state.session_id,
-                            st.session_state.message_counter,
-                            "assistant",
-                            response,
-                            chunks
-                        )
-                    
-                else:
-                    error_msg = "Could you rephrase that? I want to give you the best coaching advice possible."
-                    st.markdown(error_msg)
-                    st.session_state.message_counter += 1
-                    
-                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
-                    
-                    # DUAL LOGGING: Log error message to both tables
-                    if st.session_state.get("player_record_id"):
-                        log_message_to_sss(
-                            st.session_state.player_record_id,
-                            st.session_state.session_id,
-                            st.session_state.message_counter,
-                            "assistant",
-                            error_msg
-                        )
-                        log_message_to_conversation_log(
-                            st.session_state.player_record_id,
-                            st.session_state.session_id,
-                            st.session_state.message_counter,
-                            "assistant",
-                            error_msg
-                        )
+                
+                st.markdown(response)
+                
+                st.session_state.message_counter += 1
+                
+                st.session_state.messages.append({
+                    "role": "assistant", 
+                    "content": response
+                })
+                
+                # DUAL LOGGING: Log coach response (no chunks = 0 resources)
+                if st.session_state.get("player_record_id"):
+                    log_message_to_sss(
+                        st.session_state.player_record_id,
+                        st.session_state.session_id,
+                        st.session_state.message_counter,
+                        "assistant",
+                        response,
+                        []  # Empty chunks = 0 resources used
+                    )
+                    log_message_to_conversation_log(
+                        st.session_state.player_record_id,
+                        st.session_state.session_id,
+                        st.session_state.message_counter,
+                        "assistant",
+                        response,
+                        []  # Empty chunks = 0 resources used
+                    )
 
 
 if __name__ == "__main__":
