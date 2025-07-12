@@ -2105,8 +2105,11 @@ def main():
             st.session_state.messages = []
             st.session_state.conversation_log = []
             st.session_state.player_setup_complete = False
+            st.session_state.welcome_followup = None
+            st.session_state.recent_greetings = []
             st.rerun()
     
+    # PLAYER SETUP FORM
     if not st.session_state.get("player_setup_complete"):
         with st.form("player_setup"):
             st.markdown("### 🎾 Welcome to Tennis Coach AI")
@@ -2117,8 +2120,6 @@ def main():
                 placeholder="your.email@example.com",
                 help="Required for session continuity and progress tracking"
             )
-            
-            # REMOVED: player_name input field - Coach TA will collect this
             
             if st.form_submit_button("Start Coaching Session", type="primary"):
                 if not player_email:
@@ -2137,34 +2138,63 @@ def main():
                         session_id = str(uuid.uuid4())[:8]
                         st.session_state.session_id = session_id
                         st.session_state.messages = []
-                        st.session_state.message_counter = 0                        
+                        st.session_state.message_counter = 0
+                        
+                        # Add the greeting message
                         st.session_state.messages = [{"role": "assistant", "content": welcome_msg}]
                         
+                        # Add the followup message immediately if it exists
+                        followup_msg = st.session_state.get('welcome_followup')
+                        if followup_msg:
+                            st.session_state.messages.append({"role": "assistant", "content": followup_msg})
+                        
+                        # Log both messages
                         if st.session_state.get("player_record_id"):
-                            # DUAL LOGGING: Log welcome message to both tables
+                            # Log greeting message
+                            st.session_state.message_counter += 1
                             log_message_to_sss(
                                 st.session_state.player_record_id,
                                 session_id,
-                                0,
+                                st.session_state.message_counter,
                                 "assistant",
                                 welcome_msg
                             )
                             log_message_to_conversation_log(
                                 st.session_state.player_record_id,
                                 session_id,
-                                0,
+                                st.session_state.message_counter,
                                 "assistant",
                                 welcome_msg
                             )
+                            
+                            # Log followup message if exists
+                            if followup_msg:
+                                st.session_state.message_counter += 1
+                                log_message_to_sss(
+                                    st.session_state.player_record_id,
+                                    session_id,
+                                    st.session_state.message_counter,
+                                    "assistant",
+                                    followup_msg
+                                )
+                                log_message_to_conversation_log(
+                                    st.session_state.player_record_id,
+                                    session_id,
+                                    st.session_state.message_counter,
+                                    "assistant",
+                                    followup_msg
+                                )
                         
-                        st.success(f"Welcome! Ready to start your coaching session.")
+                        st.success("Welcome! Ready to start your coaching session.")
                         st.rerun()
         return
     
+    # DISPLAY CONVERSATION MESSAGES
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
     
+    # USER INPUT HANDLING
     if prompt := st.chat_input("Ask your tennis coach..."):
         # ADMIN MODE TRIGGER
         if prompt.strip().lower() == "hilly spike":
@@ -2412,6 +2442,9 @@ def main():
                             "assistant",
                             error_msg
                         )
+
+if __name__ == "__main__":
+    main()
 
 if __name__ == "__main__":
     main()
