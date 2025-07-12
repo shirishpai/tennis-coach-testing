@@ -573,6 +573,22 @@ def log_message_to_sss(player_record_id: str, session_id: str, message_order: in
             "Content-Type": "application/json"
         }
         
+        # Process resource details if chunks provided
+        resource_count = 0
+        resource_details = ""
+        
+        if chunks and role == "assistant":
+            resource_count = len(chunks)
+            resource_details_list = []
+            for i, chunk in enumerate(chunks):
+                relevance_score = round(chunk.get('score', 0), 3)
+                source = chunk.get('source', 'Unknown')
+                topics = chunk.get('topics', 'General')
+                resource_details_list.append(
+                    f"Resource {i+1}: {relevance_score} relevance | {topics} | {source}"
+                )
+            resource_details = "\n".join(resource_details_list)
+        
         token_count = len(content.split()) * 1.3
         role_value = "coach" if role == "assistant" else "player"
         session_id_number = int(''.join(filter(str.isdigit, session_id))) if session_id else 1
@@ -586,7 +602,9 @@ def log_message_to_sss(player_record_id: str, session_id: str, message_order: in
                 "message_content": content[:100000],
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
                 "token_count": int(token_count),
-                "session_status": "active"
+                "session_status": "active",
+                "coaching_resources_used": resource_count,
+                "resource_details": resource_details[:100000] if resource_details else ""
             }
         }
         
