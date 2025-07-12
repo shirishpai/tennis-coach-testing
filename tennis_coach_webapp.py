@@ -4,9 +4,8 @@ import json
 from typing import List, Dict
 import time
 import pandas as pd          # NEW
-import re
 from datetime import datetime # NEW
-from rag_sandbox import display_rag_sandbox_interface
+import re
 
 try:
     from pinecone import Pinecone
@@ -18,6 +17,9 @@ try:
 except ImportError as e:
     st.error(f"Missing package: {e}")
     st.stop()
+
+# Add the RAG sandbox import here
+from rag_sandbox import display_rag_sandbox_interface
 
 
 @st.cache_resource
