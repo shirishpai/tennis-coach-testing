@@ -2492,24 +2492,32 @@ def main():
         # Normal message processing (not ending)
         with st.chat_message("assistant"):
             with st.spinner("Coach is thinking..."):
-                chunks = query_pinecone(index, prompt, top_k)
-                
-                if chunks:
-                    coaching_history = st.session_state.get('coaching_history', [])
-                    
-                    # Get current player info from database
-                    player_name, player_level = get_current_player_info(st.session_state.get("player_record_id", ""))
-                    
-                    full_prompt = build_conversational_prompt_with_history(
-                        prompt, 
-                        chunks, 
-                        st.session_state.messages[:-1],
-                        coaching_history,
-                        player_name,
-                        player_level
-                    )
-                    
-                    response = query_claude(claude_client, full_prompt)
+                # TEMPORARILY BYPASS PINECONE - USE CLAUDE ONLY
+                chunks = []  # Empty chunks = no RAG context
+
+                coaching_history = st.session_state.get('coaching_history', [])
+
+                # Get current player info from database
+                player_name, player_level = get_current_player_info(st.session_state.get("player_record_id", ""))
+
+                # Build prompt without Pinecone chunks
+                claude_only_prompt = f"""You are Coach TA, a professional tennis coach providing remote coaching advice.
+
+                Player: {player_name or 'the player'} (Level: {player_level or 'general'})
+
+                COACHING APPROACH:
+                - Give direct, actionable tennis advice
+                - Ask 1-2 follow-up questions about their specific situation  
+                - End with encouragement and next steps
+                - Keep responses SHORT (2-3 sentences)
+                - Focus on technique, drills, or mental game
+                - Remember you're coaching remotely
+
+                Player question: "{prompt}"
+
+                Provide direct coaching advice:"""
+
+                response = query_claude(claude_client, claude_only_prompt)
                     
                     st.markdown(response)
                     
