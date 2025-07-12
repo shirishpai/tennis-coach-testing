@@ -2047,19 +2047,19 @@ def run_rag_comparison(user_query):
         return None
 
 def display_admin_interface():
-    """Enhanced admin interface with session analytics, player engagement, and RAG sandbox"""
+    """Enhanced admin interface with RAG Sandbox tab"""
     st.title("🔧 Tennis Coach AI - Admin Interface")
-    st.markdown("### Session Management, Analytics, and Evaluation")
+    st.markdown("### Session Management & Player Analytics")
     st.markdown("---")
 
     tab1, tab2, tab3 = st.tabs(["📊 All Sessions", "👥 Player Engagement", "🧪 RAG Sandbox"])
 
-    # --- TAB 1: Sessions ---
+    # --- Tab 1: All Sessions ---
     with tab1:
         sessions = get_all_coaching_sessions()
 
         if not sessions:
-            st.warning("No coaching sessions found in Conversation_Log.")
+            st.warning("No coaching sessions found in Active_Sessions.")
         else:
             st.markdown(f"**Found {len(sessions)} coaching sessions:**")
 
@@ -2108,9 +2108,9 @@ def display_admin_interface():
                 st.markdown("---")
 
                 messages = get_conversation_messages_with_resources(selected_session_id)
-                messages.sort(key=lambda x: x.get('message_order', 0))
 
                 if messages:
+                    messages.sort(key=lambda x: x.get('order', 0))
                     conv_tab1, conv_tab2 = st.tabs(["💬 Conversation", "📊 Resource Analytics"])
 
                     with conv_tab1:
@@ -2121,46 +2121,23 @@ def display_admin_interface():
                 else:
                     st.warning("No messages found for this session in Conversation_Log.")
 
-    # --- TAB 2: Player Engagement ---
+    # --- Tab 2: Player Engagement ---
     with tab2:
         players = get_all_players()
-        if players:
-            player_options = {f"{p['name']} ({p['email']})": p['player_id'] for p in players}
-            selected_player = st.selectbox("Select Player", list(player_options.keys()))
-
-            if selected_player:
-                sessions, player_info = get_player_sessions_from_conversation_log(player_options[selected_player])
-                display_player_engagement_analytics(sessions, player_info)
+        if not players:
+            st.warning("No players found.")
         else:
-            st.warning("No player records found.")
+            player_names = {f"{p['name']} ({p['total_sessions']} sessions)": p['player_id'] for p in players}
+            selected_player = st.selectbox("Select Player", options=list(player_names.keys()))
+            if selected_player:
+                player_id = player_names[selected_player]
+                sessions, player_info = get_player_sessions_from_conversation_log(player_id)
+                display_player_engagement_analytics(sessions, player_info)
 
-    # --- TAB 3: RAG Sandbox ---
+    # --- Tab 3: RAG Sandbox ---
     with tab3:
-        st.markdown("### 🧪 Claude RAG Sandbox Comparison")
-        st.markdown("Type a question and compare Claude’s response with Pinecone vs. general knowledge.")
-        
-        query = st.text_area("🎾 Player Question", placeholder="e.g., Why does my forehand break down under pressure?", height=100)
-        if st.button("🔍 Run RAG Comparison") and query.strip():
-            result = run_rag_comparison(query)
-            if result:
-                st.markdown("#### 📥 Claude Response (with Pinecone context)")
-                st.text_area("With Context", result["with_context"], height=200)
-
-                st.markdown("#### 🌐 Claude Response (general knowledge only)")
-                st.text_area("Without Context", result["without_context"], height=200)
-
-                st.markdown("#### ✅ Evaluate Responses")
-                col1, col2 = st.columns(2)
-
-                with col1:
-                    st.checkbox("❌ Irrelevant (Context)", key="irr_context")
-                    st.checkbox("🏆 Better Response", key="better_context")
-
-                with col2:
-                    st.checkbox("❌ Irrelevant (External)", key="irr_external")
-                    st.checkbox("🏆 Better Response", key="better_external")
-
-                st.caption("Note: Only one response should be marked as better. If both are equally good, external wins by default.")
+        st.markdown("### 🧪 RAG Comparison Sandbox")
+        run_rag_sandbox()
 
 def main():
     st.set_page_config(
