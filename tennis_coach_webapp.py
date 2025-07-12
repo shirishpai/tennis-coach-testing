@@ -2217,6 +2217,9 @@ def main():
     
     # CHECK FOR ADMIN MODE FIRST
     if st.session_state.get('admin_mode', False):
+        st.error("DEBUG: About to call admin interface")
+        st.write(f"Index type: {type(index)}")
+        st.write(f"Claude client type: {type(claude_client)}")
         display_admin_interface(index, claude_client)
         return
     
