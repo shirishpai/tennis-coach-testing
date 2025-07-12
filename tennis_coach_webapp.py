@@ -4,7 +4,8 @@ import json
 from typing import List, Dict
 import time
 import pandas as pd          # NEW
-from datetime import datetime # NEW
+from datetime import datetime, timedelta # NEW
+import re
 
 try:
     from pinecone import Pinecone
@@ -731,9 +732,6 @@ def get_player_recent_summaries(player_record_id: str, limit: int = 3) -> list:
         return []
     except Exception as e:
         return []
-
-import re
-from datetime import datetime, timedelta
 
 def calculate_days_since_last_session(player_record_id: str) -> int:
     """
