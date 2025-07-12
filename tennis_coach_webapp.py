@@ -20,11 +20,7 @@ except ImportError as e:
 
 # Add the RAG sandbox import here
 # Test import
-try:
-    from rag_sandbox import display_rag_sandbox_interface
-    print("RAG sandbox import successful!")
-except Exception as e:
-    print(f"Import error: {e}")
+
 
 
 @st.cache_resource
@@ -2184,6 +2180,7 @@ def display_admin_interface():
     with tab3:
         # RAG Sandbox tab
         try:
+            from rag_sandbox import display_rag_sandbox_interface
             display_rag_sandbox_interface(index, claude_client, get_embedding)
         except Exception as e:
             st.error(f"RAG Sandbox error: {e}")
