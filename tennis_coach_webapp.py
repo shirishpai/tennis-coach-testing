@@ -19,7 +19,12 @@ except ImportError as e:
     st.stop()
 
 # Add the RAG sandbox import here
-from rag_sandbox import display_rag_sandbox_interface
+# Test import
+try:
+    from rag_sandbox import display_rag_sandbox_interface
+    print("RAG sandbox import successful!")
+except Exception as e:
+    print(f"Import error: {e}")
 
 
 @st.cache_resource
