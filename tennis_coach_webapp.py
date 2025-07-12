@@ -2047,9 +2047,8 @@ def run_rag_comparison(user_query):
         return None
 
 def display_admin_interface():
-    """Enhanced admin interface with session analytics and RAG sandbox"""
+    """Admin dashboard with session viewer, player analytics, and RAG sandbox"""
     st.title("🔧 Tennis Coach AI - Admin Interface")
-    st.markdown("### Session Management & Player Analytics")
     st.markdown("---")
 
     tab1, tab2, tab3 = st.tabs(["📊 All Sessions", "👥 Player Engagement", "🧪 RAG Sandbox"])
@@ -2111,12 +2110,13 @@ def display_admin_interface():
 
                 messages = get_conversation_messages_with_resources(selected_session_id)
 
-                if messages:
+                if messages and isinstance(messages, list):
                     messages.sort(key=lambda x: x.get('message_order', 0))
-
                     conv_tab1, conv_tab2 = st.tabs(["💬 Conversation", "📊 Resource Analytics"])
+
                     with conv_tab1:
                         display_conversation_tab(messages)
+
                     with conv_tab2:
                         display_resource_analytics(messages)
                 else:
@@ -2142,7 +2142,7 @@ def display_admin_interface():
     # 🧪 RAG Sandbox Tab
     # -----------------------
     with tab3:
-        st.markdown("### 🔍 RAG Comparison Sandbox")
+        st.markdown("### 🧪 RAG Comparison Sandbox")
 
         user_query = st.text_area("Enter a user query:", height=100)
 
@@ -2165,7 +2165,7 @@ def display_admin_interface():
                     fallback_better = st.checkbox("⭐ Better Answer", key="fallback_better")
 
                 st.markdown("---")
-                st.caption("✅ If both answers are good, mark the external (no-context) one as better by default.")
+                st.caption("✅ If both are good, mark the no-context answer as better (less work).")
             else:
                 st.warning("Please enter a user query to compare.")
 
