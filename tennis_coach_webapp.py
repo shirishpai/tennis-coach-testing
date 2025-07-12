@@ -2047,19 +2047,21 @@ def run_rag_comparison(user_query):
         return None
 
 def display_admin_interface():
-    """Enhanced admin interface with RAG Sandbox tab"""
+    """Enhanced admin interface with session analytics and RAG sandbox"""
     st.title("🔧 Tennis Coach AI - Admin Interface")
     st.markdown("### Session Management & Player Analytics")
     st.markdown("---")
 
     tab1, tab2, tab3 = st.tabs(["📊 All Sessions", "👥 Player Engagement", "🧪 RAG Sandbox"])
 
-    # --- Tab 1: All Sessions ---
+    # -------------------
+    # 📊 All Sessions Tab
+    # -------------------
     with tab1:
         sessions = get_all_coaching_sessions()
 
         if not sessions:
-            st.warning("No coaching sessions found in Active_Sessions.")
+            st.warning("No coaching sessions found.")
         else:
             st.markdown(f"**Found {len(sessions)} coaching sessions:**")
 
@@ -2110,34 +2112,62 @@ def display_admin_interface():
                 messages = get_conversation_messages_with_resources(selected_session_id)
 
                 if messages:
-                    messages.sort(key=lambda x: x.get('order', 0))
-                    conv_tab1, conv_tab2 = st.tabs(["💬 Conversation", "📊 Resource Analytics"])
+                    messages.sort(key=lambda x: x.get('message_order', 0))
 
+                    conv_tab1, conv_tab2 = st.tabs(["💬 Conversation", "📊 Resource Analytics"])
                     with conv_tab1:
                         display_conversation_tab(messages)
-
                     with conv_tab2:
                         display_resource_analytics(messages)
                 else:
                     st.warning("No messages found for this session in Conversation_Log.")
 
-    # --- Tab 2: Player Engagement ---
+    # -----------------------
+    # 👥 Player Engagement Tab
+    # -----------------------
     with tab2:
         players = get_all_players()
         if not players:
-            st.warning("No players found.")
+            st.warning("No player data found.")
         else:
-            player_names = {f"{p['name']} ({p['total_sessions']} sessions)": p['player_id'] for p in players}
-            selected_player = st.selectbox("Select Player", options=list(player_names.keys()))
-            if selected_player:
-                player_id = player_names[selected_player]
+            player_options = {f"{p['name']} ({p['total_sessions']} sessions)": p['player_id'] for p in players}
+            selected = st.selectbox("🎾 Select Player", options=list(player_options.keys()))
+
+            if selected:
+                player_id = player_options[selected]
                 sessions, player_info = get_player_sessions_from_conversation_log(player_id)
                 display_player_engagement_analytics(sessions, player_info)
 
-    # --- Tab 3: RAG Sandbox ---
+    # -----------------------
+    # 🧪 RAG Sandbox Tab
+    # -----------------------
     with tab3:
-        st.markdown("### 🧪 RAG Comparison Sandbox")
-        run_rag_sandbox()
+        st.markdown("### 🔍 RAG Comparison Sandbox")
+
+        user_query = st.text_area("Enter a user query:", height=100)
+
+        if st.button("Compare Claude Responses"):
+            if user_query.strip():
+                rag_response, fallback_response = compare_claude_rag_vs_fallback(user_query)
+
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    st.markdown("#### 🧠 Claude with Pinecone")
+                    st.write(rag_response or "No response.")
+                    rag_irrelevant = st.checkbox("🟥 Irrelevant (RAG)", key="rag_irrelevant")
+                    rag_better = st.checkbox("⭐ Better Answer", key="rag_better")
+
+                with col2:
+                    st.markdown("#### 🌐 Claude without context")
+                    st.write(fallback_response or "No response.")
+                    fallback_irrelevant = st.checkbox("🟥 Irrelevant (No Context)", key="fallback_irrelevant")
+                    fallback_better = st.checkbox("⭐ Better Answer", key="fallback_better")
+
+                st.markdown("---")
+                st.caption("✅ If both answers are good, mark the external (no-context) one as better by default.")
+            else:
+                st.warning("Please enter a user query to compare.")
 
 def main():
     st.set_page_config(
