@@ -1945,29 +1945,128 @@ def display_player_engagement_analytics(sessions, player_info):
             with col2:
                 st.write(f"{trend_emoji} **Engagement Trend:** {'Increasing' if message_trend > 0 else 'Decreasing' if message_trend < 0 else 'Stable'}")
 
+def run_rag_comparison(user_query):
+    """Embed query, retrieve from Pinecone, get Claude responses with and without context"""
+    try:
+        import openai
+        import pinecone
+
+        # --- CONFIG ---
+        EMBEDDING_MODEL = "text-embedding-3-small"
+        EMBEDDING_DIM = 1536
+        PINECONE_INDEX_NAME = "taoai-v1-index"
+        PINECONE_ENV = "us-east-1"
+        CLAUDE_MODEL = "claude-3-sonnet-20240229"
+        MAX_CONTEXT_CHUNKS = 5
+
+        # --- EMBED QUERY ---
+        embedding_response = openai.embeddings.create(
+            model=EMBEDDING_MODEL,
+            input=user_query
+        )
+        query_vector = embedding_response.data[0].embedding
+
+        # --- PINECONE RETRIEVAL ---
+        pinecone.init(api_key=st.secrets["PINECONE_API_KEY"], environment=PINECONE_ENV)
+        index = pinecone.Index(PINECONE_INDEX_NAME)
+        response = index.query(
+            vector=query_vector,
+            top_k=MAX_CONTEXT_CHUNKS,
+            include_metadata=True,
+            namespace=""
+        )
+
+        chunks = response.matches if response and response.matches else []
+        top_chunks = sorted(chunks, key=lambda x: x.score, reverse=True)[:MAX_CONTEXT_CHUNKS]
+
+        # --- Format context for Claude ---
+        if top_chunks:
+            context_text = "\n\n---\n\n".join(
+                f"Score: {round(c.score, 3)}\nSource: {c.metadata.get('source', 'unknown')}\nText: {c.metadata.get('text', '')[:300]}"
+                for c in top_chunks
+            )
+        else:
+            context_text = "(No relevant data found)"
+
+        # --- Claude PROMPTS ---
+        context_prompt = f"""You are a world-class tennis coach. Based on the following retrieved context, answer the player's question clearly, with coaching insight, structure, and tone.
+
+[User Question]
+{user_query}
+
+[Retrieved Context]
+{context_text}
+"""
+
+        external_prompt = f"""You are a world-class tennis coach. Answer the following question from your own expertise, with no access to retrieved documents or context.
+
+[User Question]
+{user_query}
+"""
+
+        headers = {
+            "x-api-key": st.secrets["ANTHROPIC_API_KEY"],
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json"
+        }
+
+        body_context = {
+            "model": CLAUDE_MODEL,
+            "max_tokens": 1200,
+            "temperature": 0.6,
+            "messages": [{"role": "user", "content": context_prompt}]
+        }
+
+        body_external = {
+            "model": CLAUDE_MODEL,
+            "max_tokens": 1200,
+            "temperature": 0.6,
+            "messages": [{"role": "user", "content": external_prompt}]
+        }
+
+        import requests
+        claude_url = "https://api.anthropic.com/v1/messages"
+
+        # Claude with Pinecone context
+        context_response = requests.post(claude_url, headers=headers, json=body_context)
+        with_context = context_response.json()["content"][0]["text"]
+
+        # Claude without any vector context
+        external_response = requests.post(claude_url, headers=headers, json=body_external)
+        without_context = external_response.json()["content"][0]["text"]
+
+        return {
+            "question": user_query,
+            "context_chunks": top_chunks,
+            "with_context": with_context,
+            "without_context": without_context
+        }
+
+    except Exception as e:
+        st.error(f"Error in RAG comparison: {e}")
+        return None
+
 def display_admin_interface():
-    """Enhanced admin interface reading from Active_Sessions for resource analytics"""
+    """Enhanced admin interface with session analytics, player engagement, and RAG sandbox"""
     st.title("🔧 Tennis Coach AI - Admin Interface")
-    st.markdown("### Session Management & Player Analytics")
+    st.markdown("### Session Management, Analytics, and Evaluation")
     st.markdown("---")
-    
-    # Create tabs for different views
-    tab1, tab2 = st.tabs(["📊 All Sessions", "👥 Player Engagement"])
-    
+
+    tab1, tab2, tab3 = st.tabs(["📊 All Sessions", "👥 Player Engagement", "🧪 RAG Sandbox"])
+
+    # --- TAB 1: Sessions ---
     with tab1:
-        # Session overview from Active_Sessions
-        sessions = get_all_coaching_sessions()
-        
+        sessions = simple_get_all_sessions_fixed()
+
         if not sessions:
-            st.warning("No coaching sessions found.")
+            st.warning("No coaching sessions found in Conversation_Log.")
         else:
             st.markdown(f"**Found {len(sessions)} coaching sessions:**")
-            
-            # Summary analytics
+
             total_resources = sum(s['total_resources'] for s in sessions)
             total_responses = sum(s['coach_responses'] for s in sessions)
             avg_resources = total_resources / total_responses if total_responses > 0 else 0
-            
+
             col1, col2, col3 = st.columns(3)
             with col1:
                 st.metric("Total Sessions", len(sessions))
@@ -1975,35 +2074,27 @@ def display_admin_interface():
                 st.metric("Total Resources Used", total_resources)
             with col3:
                 st.metric("Avg Resources/Response", f"{avg_resources:.1f}")
-            
+
             st.markdown("---")
-            
-            # Session selector
+
             session_options = {}
             for session in sessions[:15]:
-                timestamp = session['timestamp']
-                try:
-                    dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-                    formatted_time = dt.strftime("%m/%d %H:%M")
-                except:
-                    formatted_time = "Unknown time"
-                
+                session_id = session['session_id']
                 status_emoji = "✅" if session['status'] == 'completed' else "🟡"
-                resource_info = f"📚{session['total_resources']}"
-                display_name = f"{status_emoji} Session {session['session_id']} | {session['message_count']} msgs | {resource_info} | {formatted_time}"
-                session_options[display_name] = session['session_id']
-            
+                resource_info = "📚Yes" if session['total_resources'] > 0 else "📚No"
+                display_name = f"{status_emoji} Session {session_id} | {session['message_count']} msgs | {resource_info}"
+                session_options[display_name] = session_id
+
             selected_display = st.selectbox(
                 "🎾 Select Session to Analyze",
                 options=list(session_options.keys()),
                 help="Choose a session to view conversation and resource analytics"
             )
-            
+
             if selected_display:
                 selected_session_id = session_options[selected_display]
                 session_info = next(s for s in sessions if s['session_id'] == selected_session_id)
-                
-                # Display session metrics
+
                 col1, col2, col3, col4 = st.columns(4)
                 with col1:
                     st.metric("Session ID", session_info['session_id'])
@@ -2013,172 +2104,63 @@ def display_admin_interface():
                     st.metric("Resources Used", session_info['total_resources'])
                 with col4:
                     st.metric("Resources/Response", session_info['resources_per_response'])
-                
+
                 st.markdown("---")
-                
-                # Get conversation with resource details - FIXED VERSION
+
                 messages = get_conversation_messages_with_resources(selected_session_id)
-                
+                messages.sort(key=lambda x: x.get('message_order', 0))
+
                 if messages:
-                    # Create tabs for different views
                     conv_tab1, conv_tab2 = st.tabs(["💬 Conversation", "📊 Resource Analytics"])
-                    
+
                     with conv_tab1:
-                        st.markdown("### 💬 Conversation Log")
-                        
-                        for msg in messages:
-                            role = msg['role']
-                            content = msg['content']
-                            resources_used = msg.get('resources_used', 0)
-                            
-                            if role == 'player':
-                                # Player message - left side, blue bubble
-                                st.markdown(f"""
-                                <div style="display: flex; justify-content: flex-start; margin: 10px 0;">
-                                    <div style="background-color: #E3F2FD; padding: 10px 15px; border-radius: 18px; max-width: 70%; border: 1px solid #BBDEFB;">
-                                        <strong>🧑‍🎓 Player:</strong><br>
-                                        {content}
-                                    </div>
-                                </div>
-                                """, unsafe_allow_html=True)
-                                
-                            elif role == 'coach':
-                                # Coach message - right side, green bubble
-                                resource_indicator = f" 📚 {resources_used}" if resources_used > 0 else ""
-                                st.markdown(f"""
-                                <div style="display: flex; justify-content: flex-end; margin: 10px 0;">
-                                    <div style="background-color: #E8F5E8; padding: 10px 15px; border-radius: 18px; max-width: 70%; border: 1px solid #C8E6C9;">
-                                        <strong>🎾 Coach TA:</strong>{resource_indicator}<br>
-                                        {content}
-                                    </div>
-                                </div>
-                                """, unsafe_allow_html=True)
-                                
-                                # Show expandable resource details if available
-                                if resources_used > 0 and msg.get('resource_details'):
-                                    with st.expander(f"📊 View {resources_used} coaching resources"):
-                                        st.text(msg['resource_details'])
-                    
+                        display_conversation_tab(messages)
+
                     with conv_tab2:
-                        # Resource analytics tab
                         display_resource_analytics(messages)
-                        
                 else:
-                    st.warning("No messages found for this session.")
-    
+                    st.warning("No messages found for this session in Conversation_Log.")
+
+    # --- TAB 2: Player Engagement ---
     with tab2:
-        # Player engagement analysis
-        st.markdown("### 👥 Player Engagement Analysis")
-        
         players = get_all_players()
-        
-        if not players:
-            st.warning("No players found in the database.")
+        if players:
+            player_options = {f"{p['name']} ({p['email']})": p['player_id'] for p in players}
+            selected_player = st.selectbox("Select Player", list(player_options.keys()))
+
+            if selected_player:
+                sessions, player_info = get_player_sessions_from_conversation_log(player_options[selected_player])
+                display_player_engagement_analytics(sessions, player_info)
         else:
-            # Player selector
-            player_options = {}
-            for player in players:
-                name = player['name'] if player['name'] != 'Unknown' else player['email'].split('@')[0]
-                level = player['tennis_level']
-                sessions_count = player['total_sessions']
-                display_name = f"{name} ({level}) - {sessions_count} sessions"
-                player_options[display_name] = player['player_id']
-            
-            selected_player_display = st.selectbox(
-                "🧑‍🎓 Select Player to Analyze",
-                options=list(player_options.keys()),
-                help="Choose a player to view their complete engagement history"
-            )
-            
-            if selected_player_display:
-                selected_player_id = player_options[selected_player_display]
-                
-                # Get player sessions and info
-                player_sessions, player_info = get_player_sessions_from_conversation_log(selected_player_id)
-                
-                if player_sessions:
-                    # Player info header
-                    st.markdown("#### 🧑‍🎓 Player Profile")
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        st.write(f"**Name:** {player_info.get('name', 'Unknown')}")
-                        st.write(f"**Email:** {player_info.get('email', 'Unknown')}")
-                    with col2:
-                        st.write(f"**Tennis Level:** {player_info.get('tennis_level', 'Not specified')}")
-                        st.write(f"**Status:** {player_info.get('player_status', 'Unknown')}")
-                    with col3:
-                        try:
-                            first_session = datetime.fromisoformat(player_info.get('first_session_date', '').replace('Z', '+00:00')).strftime("%m/%d/%Y")
-                        except:
-                            first_session = "Unknown"
-                        st.write(f"**First Session:** {first_session}")
-                        st.write(f"**Total Sessions:** {player_info.get('total_sessions', 0)}")
-                    
-                    st.markdown("---")
-                    
-                    # Player engagement analytics
-                    display_player_engagement_analytics(player_sessions, player_info)
-                    
-                    st.markdown("---")
-                    
-                    # Individual session selector for this player
-                    st.markdown("#### 🔍 View Individual Sessions")
-                    session_options = {}
-                    for i, session in enumerate(player_sessions):
-                        status_emoji = "✅" if session['status'] == 'completed' else "🟡"
-                        resource_info = f"📚{session['total_resources']}"
-                        display_name = f"{status_emoji} Session #{len(player_sessions)-i} | {session['session_id']} | {session['message_count']} msgs | {resource_info}"
-                        session_options[display_name] = session['session_id']
-                    
-                    if session_options:
-                        selected_session_display = st.selectbox(
-                            "Select a session to view details:",
-                            options=list(session_options.keys()),
-                            key="player_session_selector"
-                        )
-                        
-                        if selected_session_display:
-                            selected_session_id = session_options[selected_session_display]
-                            messages = get_conversation_messages_with_resources(selected_session_id)
-                            
-                            if messages:
-                                st.markdown("##### 💬 Session Conversation")
-                                for msg in messages:
-                                    role = msg['role']
-                                    content = msg['content']
-                                    resources_used = msg.get('resources_used', 0)
-                                    
-                                    if role == 'player':
-                                        st.markdown(f"""
-                                        <div style="display: flex; justify-content: flex-start; margin: 10px 0;">
-                                            <div style="background-color: #E3F2FD; padding: 10px 15px; border-radius: 18px; max-width: 70%; border: 1px solid #BBDEFB;">
-                                                <strong>🧑‍🎓 Player:</strong><br>
-                                                {content}
-                                            </div>
-                                        </div>
-                                        """, unsafe_allow_html=True)
-                                    elif role == 'coach':
-                                        resource_indicator = f" 📚 {resources_used}" if resources_used > 0 else ""
-                                        st.markdown(f"""
-                                        <div style="display: flex; justify-content: flex-end; margin: 10px 0;">
-                                            <div style="background-color: #E8F5E8; padding: 10px 15px; border-radius: 18px; max-width: 70%; border: 1px solid #C8E6C9;">
-                                                <strong>🎾 Coach TA:</strong>{resource_indicator}<br>
-                                                {content}
-                                            </div>
-                                        </div>
-                                        """, unsafe_allow_html=True)
-                                        
-                                        if resources_used > 0 and msg.get('resource_details'):
-                                            with st.expander(f"📊 View {resources_used} coaching resources"):
-                                                st.text(msg['resource_details'])
-                else:
-                    st.warning("No sessions found for this player.")
-    
-    # Exit admin mode
-    st.markdown("---")
-    if st.button("🏃‍♂️ Exit Admin Mode", type="primary"):
-        st.session_state.admin_mode = False
-        st.rerun()
+            st.warning("No player records found.")
+
+    # --- TAB 3: RAG Sandbox ---
+    with tab3:
+        st.markdown("### 🧪 Claude RAG Sandbox Comparison")
+        st.markdown("Type a question and compare Claude’s response with Pinecone vs. general knowledge.")
+        
+        query = st.text_area("🎾 Player Question", placeholder="e.g., Why does my forehand break down under pressure?", height=100)
+        if st.button("🔍 Run RAG Comparison") and query.strip():
+            result = run_rag_comparison(query)
+            if result:
+                st.markdown("#### 📥 Claude Response (with Pinecone context)")
+                st.text_area("With Context", result["with_context"], height=200)
+
+                st.markdown("#### 🌐 Claude Response (general knowledge only)")
+                st.text_area("Without Context", result["without_context"], height=200)
+
+                st.markdown("#### ✅ Evaluate Responses")
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    st.checkbox("❌ Irrelevant (Context)", key="irr_context")
+                    st.checkbox("🏆 Better Response", key="better_context")
+
+                with col2:
+                    st.checkbox("❌ Irrelevant (External)", key="irr_external")
+                    st.checkbox("🏆 Better Response", key="better_external")
+
+                st.caption("Note: Only one response should be marked as better. If both are equally good, external wins by default.")
 
 def main():
     st.set_page_config(
