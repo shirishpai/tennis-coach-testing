@@ -1067,6 +1067,67 @@ def generate_smart_greeting(player_name: str, days_since: int, session_tone: str
     
     return selected_greeting
 
+def generate_followup_message(player_name: str, last_session_summary: dict, session_tone: str) -> str:
+    """Generate specific follow-up based on last session priority"""
+    
+    if not last_session_summary:
+        return "What would you like to work on today?"
+    
+    # Priority 1: Homework/practice check
+    homework = last_session_summary.get('homework_assigned', '').strip()
+    if homework and len(homework) > 10:  # Meaningful homework content
+        if len(homework) > 60:
+            homework_preview = homework[:60] + "..."
+        else:
+            homework_preview = homework
+        return f"Did you get a chance to practice what we discussed? {homework_preview} How did it go?"
+    
+    # Priority 2: Breakthrough follow-up (only if positive tone)
+    breakthroughs = last_session_summary.get('key_breakthroughs', '').strip()
+    if breakthroughs and len(breakthroughs) > 10 and session_tone == "positive":
+        if len(breakthroughs) > 50:
+            breakthrough_preview = breakthroughs[:50] + "..."
+        else:
+            breakthrough_preview = breakthroughs
+        return f"How has that breakthrough been working out? {breakthrough_preview}"
+    
+    # Priority 3: Next session focus
+    next_focus = last_session_summary.get('next_session_focus', '').strip()
+    if next_focus and len(next_focus) > 10:
+        if len(next_focus) > 55:
+            focus_preview = next_focus[:55] + "..."
+        else:
+            focus_preview = next_focus
+        return f"Ready to work on what we planned? {focus_preview}"
+    
+    # Priority 4: Technical follow-up
+    technical_focus = last_session_summary.get('technical_focus', '').strip()
+    if technical_focus and len(technical_focus) > 10:
+        # Look for specific technique mentions
+        tech_words = ["forehand", "backhand", "serve", "volley", "grip", "stance", "footwork"]
+        mentioned_tech = None
+        for tech in tech_words:
+            if tech in technical_focus.lower():
+                mentioned_tech = tech
+                break
+        
+        if mentioned_tech:
+            return f"How has that {mentioned_tech} work been going since last time?"
+        else:
+            if len(technical_focus) > 45:
+                tech_preview = technical_focus[:45] + "..."
+            else:
+                tech_preview = technical_focus
+            return f"How has the work on {tech_preview.lower()} been going?"
+    
+    # Priority 5: Mental game follow-up
+    mental_notes = last_session_summary.get('mental_game_notes', '').strip()
+    if mental_notes and len(mental_notes) > 10:
+        return f"How has your confidence and mindset been on court?"
+    
+    # Default fallback
+    return "What would you like to focus on today?"
+
 def setup_player_session_with_continuity(player_email: str):
     """
     Enhanced player setup with immediate two-message welcome system
