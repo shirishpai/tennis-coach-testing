@@ -2094,33 +2094,34 @@ def display_admin_interface():
 
             if selected_display:
                 selected_session_id = session_options[selected_display]
-                session_info = next(s for s in sessions if s['session_id'] == selected_session_id)
+                session_info = next((s for s in sessions if s['session_id'] == selected_session_id), None)
 
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    st.metric("Session ID", session_info['session_id'])
-                with col2:
-                    st.metric("Messages", session_info['message_count'])
-                with col3:
-                    st.metric("Resources Used", session_info['total_resources'])
-                with col4:
-                    st.metric("Resources/Response", session_info['resources_per_response'])
+                if session_info:
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        st.metric("Session ID", session_info['session_id'])
+                    with col2:
+                        st.metric("Messages", session_info['message_count'])
+                    with col3:
+                        st.metric("Resources Used", session_info['total_resources'])
+                    with col4:
+                        st.metric("Resources/Response", session_info['resources_per_response'])
 
-                st.markdown("---")
+                    st.markdown("---")
 
-                messages = get_conversation_messages_with_resources(selected_session_id)
+                    messages = get_conversation_messages_with_resources(selected_session_id)
 
-                if messages and isinstance(messages, list):
-                    messages.sort(key=lambda x: x.get('message_order', 0))
-                    conv_tab1, conv_tab2 = st.tabs(["💬 Conversation", "📊 Resource Analytics"])
+                    if messages and isinstance(messages, list):
+                        messages.sort(key=lambda x: x.get('message_order', 0))
 
-                    with conv_tab1:
-                        display_conversation_tab(messages)
+                        conv_tab1, conv_tab2 = st.tabs(["💬 Conversation", "📊 Resource Analytics"])
+                        with conv_tab1:
+                            display_conversation_tab(messages)
 
-                    with conv_tab2:
-                        display_resource_analytics(messages)
-                else:
-                    st.warning("No messages found for this session in Conversation_Log.")
+                        with conv_tab2:
+                            display_resource_analytics(messages)
+                    else:
+                        st.warning("No messages found for this session in Conversation_Log.")
 
     # -----------------------
     # 👥 Player Engagement Tab
@@ -2165,9 +2166,10 @@ def display_admin_interface():
                     fallback_better = st.checkbox("⭐ Better Answer", key="fallback_better")
 
                 st.markdown("---")
-                st.caption("✅ If both are good, mark the no-context answer as better (less work).")
+                st.caption("✅ If both are good, mark the no-context answer as better (less effort).")
             else:
                 st.warning("Please enter a user query to compare.")
+
 
 def main():
     st.set_page_config(
