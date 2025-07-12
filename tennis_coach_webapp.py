@@ -2160,8 +2160,8 @@ def main():
     
     with st.sidebar:
         st.header("🔧 Admin Controls")
-        top_k = st.slider("Coaching resources", 1, 8, 3)
-        
+        top_k = st.slider("Coaching resources", 1, 8, 3, key="coaching_resources_slider")
+    
         if st.button("🔄 New Session"):
             st.session_state.messages = []
             st.session_state.conversation_log = []
