@@ -2179,14 +2179,27 @@ def display_admin_interface():
                     st.warning("No sessions found for this player.")
     
     with tab3:
-        try:
-            from rag_sandbox import display_rag_sandbox_interface
-            display_rag_sandbox_interface(index, claude_client, get_embedding)
-        except Exception as e:
-            st.error(f"RAG Sandbox error: {e}")
-            st.info("The RAG Sandbox is under development. Please check back later.")
-            import traceback
-            st.code(traceback.format_exc())
+    st.markdown("# 🧪 RAG Sandbox (Debug Mode)")
+    
+    try:
+        st.info("Step 1: Importing RAG sandbox...")
+        from rag_sandbox import display_rag_sandbox_interface
+        st.success("✅ Import successful!")
+        
+        st.info("Step 2: Checking function parameters...")
+        st.write(f"Index available: {index is not None}")
+        st.write(f"Claude client available: {claude_client is not None}")
+        st.write(f"Get embedding function available: {get_embedding is not None}")
+        
+        if st.button("🧪 Load RAG Sandbox Interface"):
+            st.info("Step 3: Loading RAG interface...")
+            with st.spinner("Loading sandbox..."):
+                display_rag_sandbox_interface(index, claude_client, get_embedding)
+                
+    except Exception as e:
+        st.error(f"RAG Sandbox error: {e}")
+        import traceback
+        st.code(traceback.format_exc())
     
     # Exit admin mode
     st.markdown("---")
