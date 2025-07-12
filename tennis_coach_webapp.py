@@ -2183,7 +2183,11 @@ def display_admin_interface():
                     st.warning("No sessions found for this player.")
     with tab3:
         # RAG Sandbox tab
-        display_rag_sandbox_interface(index, claude_client, get_embedding)
+        try:
+            display_rag_sandbox_interface(index, claude_client, get_embedding)
+        except Exception as e:
+            st.error(f"RAG Sandbox error: {e}")
+            st.info("The RAG Sandbox is under development. Please check back later.")
     
     # Exit admin mode
     st.markdown("---")
