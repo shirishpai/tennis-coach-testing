@@ -2056,7 +2056,7 @@ def display_admin_interface():
 
     # --- TAB 1: Sessions ---
     with tab1:
-        sessions = simple_get_all_sessions_fixed()
+        sessions = get_all_coaching_sessions()
 
         if not sessions:
             st.warning("No coaching sessions found in Conversation_Log.")
