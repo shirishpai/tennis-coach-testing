@@ -2230,6 +2230,14 @@ def main():
     with st.spinner("Connecting to tennis coaching database..."):
         index, claude_client = setup_connections()
     
+        # Debug the connection results
+        st.write(f"setup_connections returned: index={index}, claude_client={claude_client}")
+    
+        if index is None:
+            st.error("Index is None!")
+        if claude_client is None:
+            st.error("Claude client is None!")
+    
     if not index or not claude_client:
         st.error("Failed to connect to coaching systems. Please check API keys.")
         st.stop()
