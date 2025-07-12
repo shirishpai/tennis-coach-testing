@@ -2170,6 +2170,7 @@ def display_admin_interface():
             else:
                 st.warning("Please enter a user query to compare.")
 
+
 def main():
     st.set_page_config(
         page_title="Tennis Coach AI",
