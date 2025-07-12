@@ -732,8 +732,328 @@ def get_player_recent_summaries(player_record_id: str, limit: int = 3) -> list:
     except Exception as e:
         return []
 
+import re
+from datetime import datetime, timedelta
+
+def calculate_days_since_last_session(player_record_id: str) -> int:
+    """
+    Calculate days since last session by looking at Active_Sessions timestamps
+    """
+    try:
+        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
+        headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
+        params = {
+            "sort[0][field]": "timestamp",
+            "sort[0][direction]": "desc",
+            "maxRecords": 50
+        }
+        
+        response = requests.get(url, headers=headers, params=params)
+        if response.status_code == 200:
+            records = response.json().get('records', [])
+            
+            # Find most recent session for this player
+            for record in records:
+                fields = record.get('fields', {})
+                record_player_ids = fields.get('player_id', [])
+                
+                if isinstance(record_player_ids, list) and player_record_id in record_player_ids:
+                    last_timestamp = fields.get('timestamp', '')
+                    if last_timestamp:
+                        try:
+                            # Parse the timestamp
+                            last_dt = datetime.fromisoformat(last_timestamp.replace('Z', '+00:00'))
+                            now_dt = datetime.now(last_dt.tzinfo)
+                            days_diff = (now_dt - last_dt).days
+                            return days_diff
+                        except:
+                            pass
+                    break
+        
+        return 7  # Default to 1 week if can't determine
+    except Exception as e:
+        return 7  # Default fallback
+
+
+def analyze_session_tone(session_summary: dict) -> str:
+    """
+    Analyze the tone/mood of the last session from summary content
+    """
+    if not session_summary:
+        return "neutral"
+    
+    # Combine all text fields for analysis
+    all_text = " ".join([
+        session_summary.get('technical_focus', ''),
+        session_summary.get('key_breakthroughs', ''),
+        session_summary.get('mental_game_notes', ''),
+        session_summary.get('condensed_summary', '')
+    ]).lower()
+    
+    if not all_text.strip():
+        return "neutral"
+    
+    # Define tone indicators
+    positive_indicators = [
+        'breakthrough', 'progress', 'improvement', 'great', 'excellent', 'good',
+        'clicked', 'got it', 'makes sense', 'comfortable', 'confident',
+        'working well', 'success', 'better', 'improved', 'solid'
+    ]
+    
+    challenging_indicators = [
+        'struggle', 'difficult', 'frustrating', 'hard time', 'trouble',
+        'inconsistent', 'issues', 'problems', 'challenging', 'tough',
+        'need work', 'focus on', 'fix', 'work on'
+    ]
+    
+    technical_indicators = [
+        'grip', 'stance', 'follow-through', 'technique', 'mechanics',
+        'form', 'adjustment', 'forehand', 'backhand', 'serve', 'volley',
+        'footwork', 'swing', 'contact', 'timing'
+    ]
+    
+    mental_indicators = [
+        'confidence', 'nervous', 'pressure', 'focus', 'mindset',
+        'mental', 'thinking', 'calm', 'anxiety', 'concentration'
+    ]
+    
+    # Count indicators
+    positive_count = sum(1 for indicator in positive_indicators if indicator in all_text)
+    challenging_count = sum(1 for indicator in challenging_indicators if indicator in all_text)
+    technical_count = sum(1 for indicator in technical_indicators if indicator in all_text)
+    mental_count = sum(1 for indicator in mental_indicators if indicator in all_text)
+    
+    # Determine primary tone
+    if positive_count >= 2 and positive_count > challenging_count:
+        return "positive"
+    elif challenging_count >= 2 and challenging_count > positive_count:
+        return "challenging"
+    elif technical_count >= 2:
+        return "technical"
+    elif mental_count >= 2:
+        return "mental"
+    else:
+        return "neutral"
+
+
+def determine_frequency_pattern(total_sessions: int, days_since_last: int) -> str:
+    """
+    Determine player's engagement pattern
+    """
+    if total_sessions <= 2:
+        return "new_returner"
+    elif total_sessions >= 8:
+        return "committed"
+    elif days_since_last <= 7:
+        return "regular"
+    elif days_since_last <= 14:
+        return "occasional"
+    else:
+        return "infrequent"
+
+
+def get_greeting_variation(category: str, used_greetings: list) -> str:
+    """
+    Get a greeting variation that hasn't been used recently
+    """
+    greeting_bank = {
+        "same_day": [
+            "Back already! How's it going?",
+            "Twice in one day - I love the dedication!",
+            "Ready for round two?"
+        ],
+        "next_day": [
+            "Back for more! How are you feeling?",
+            "Love the commitment - ready to keep working?",
+            "Day two! How's everything feeling?"
+        ],
+        "positive_recent": [
+            "Hey {name}! Still feeling good about that progress?",
+            "{name}! How's that confidence been?",
+            "Hi {name}! I bet you've been thinking about that breakthrough!"
+        ],
+        "challenging_return": [
+            "Hey {name}! How are you feeling today?",
+            "{name}! Ready to tackle some tennis?",
+            "Hi {name}! How's everything been going?"
+        ],
+        "technical_followup": [
+            "Hey {name}! How's that technique been working out?",
+            "{name}! Have you been practicing what we worked on?",
+            "Hi {name}! How's that adjustment feeling?"
+        ],
+        "mental_checkin": [
+            "Hey {name}! How's the confidence been?",
+            "{name}! How's your mindset been on court?",
+            "Hi {name}! How are you feeling about your game?"
+        ],
+        "been_a_while": [
+            "{name}! Great to have you back!",
+            "Hey {name}! It's been a while - how have you been?",
+            "{name}! Good to see you again!"
+        ],
+        "long_time": [
+            "{name}! Wow, it's been a while - how have you been?",
+            "Hey {name}! Great to see you back after so long!",
+            "{name}! Good to have you back - how's life been?"
+        ],
+        "regular_casual": [
+            "Hey {name}! How's it going?",
+            "{name}! Good to see you again!",
+            "Hi {name}! How have you been?"
+        ],
+        "committed_encouraging": [
+            "Hey {name}! Love seeing you back so consistently!",
+            "{name}! Your dedication is impressive - how are you feeling?",
+            "Hi {name}! Ready for another great session?"
+        ],
+        "new_returner_welcoming": [
+            "Hey {name}! Good to see you back!",
+            "{name}! Nice to see you're staying with it!",
+            "Hi {name}! How has tennis been treating you?"
+        ]
+    }
+    
+    variations = greeting_bank.get(category, greeting_bank["regular_casual"])
+    
+    # Filter out recently used greetings
+    available = [g for g in variations if g not in used_greetings]
+    
+    # If all were used recently, use the oldest one
+    if not available:
+        available = variations
+    
+    # Return the first available variation
+    return available[0]
+
+
+def generate_smart_greeting(player_name: str, player_record_id: str, last_session_summary: dict, total_sessions: int) -> str:
+    """
+    Generate intelligent, varied greeting based on player history and context
+    """
+    # Get session memory for recent greetings
+    used_greetings = st.session_state.get('recent_greetings', [])
+    
+    # Calculate context factors
+    days_since = calculate_days_since_last_session(player_record_id)
+    session_tone = analyze_session_tone(last_session_summary)
+    frequency_pattern = determine_frequency_pattern(total_sessions, days_since)
+    
+    # Decision tree logic
+    greeting_category = "regular_casual"  # default
+    
+    # Time-based priorities (override others)
+    if days_since == 0:
+        greeting_category = "same_day"
+    elif days_since == 1:
+        greeting_category = "next_day"
+    elif days_since >= 22:
+        greeting_category = "long_time"
+    elif days_since >= 11:
+        greeting_category = "been_a_while"
+    else:
+        # Context-based greetings for recent visits
+        if session_tone == "positive":
+            greeting_category = "positive_recent"
+        elif session_tone == "challenging":
+            greeting_category = "challenging_return"
+        elif session_tone == "technical":
+            greeting_category = "technical_followup"
+        elif session_tone == "mental":
+            greeting_category = "mental_checkin"
+        else:
+            # Frequency-based defaults
+            if frequency_pattern == "committed":
+                greeting_category = "committed_encouraging"
+            elif frequency_pattern == "new_returner":
+                greeting_category = "new_returner_welcoming"
+            else:
+                greeting_category = "regular_casual"
+    
+    # Get the greeting variation
+    greeting_template = get_greeting_variation(greeting_category, used_greetings)
+    greeting = greeting_template.format(name=player_name)
+    
+    # Store in session memory (keep last 3)
+    recent_greetings = st.session_state.get('recent_greetings', [])
+    recent_greetings.append(greeting)
+    st.session_state.recent_greetings = recent_greetings[-3:]  # Keep last 3
+    
+    return greeting
+
+
+def generate_followup_message(player_name: str, last_session_summary: dict, session_tone: str) -> str:
+    """
+    Generate the second message based on what happened last session
+    """
+    if not last_session_summary:
+        return "What's on your mind for today's session?"
+    
+    # Priority 1: Homework/practice check
+    homework = last_session_summary.get('homework_assigned', '').strip()
+    if homework:
+        homework_preview = homework[:75] + "..." if len(homework) > 75 else homework
+        return f"Did you get a chance to practice what we discussed? {homework_preview} How did it go?"
+    
+    # Priority 2: Breakthrough follow-up
+    breakthroughs = last_session_summary.get('key_breakthroughs', '').strip()
+    if breakthroughs and session_tone == "positive":
+        breakthrough_preview = breakthroughs[:60] + "..." if len(breakthroughs) > 60 else breakthroughs
+        return f"How has that breakthrough been working out? {breakthrough_preview}"
+    
+    # Priority 3: Technical follow-up
+    technical_focus = last_session_summary.get('technical_focus', '').strip()
+    if technical_focus:
+        # Extract the main technique mentioned
+        tech_words = ["forehand", "backhand", "serve", "volley", "grip", "stance", "footwork"]
+        mentioned_tech = None
+        for tech in tech_words:
+            if tech in technical_focus.lower():
+                mentioned_tech = tech
+                break
+        
+        if mentioned_tech:
+            return f"How has that {mentioned_tech} work been going since last time?"
+        else:
+            tech_preview = technical_focus[:50] + "..." if len(technical_focus) > 50 else technical_focus
+            return f"How has the work on {tech_preview.lower()} been going?"
+    
+    # Priority 4: Next session focus
+    next_focus = last_session_summary.get('next_session_focus', '').strip()
+    if next_focus:
+        focus_preview = next_focus[:60] + "..." if len(next_focus) > 60 else next_focus
+        return f"Ready to work on what we planned? {focus_preview}"
+    
+    # Default fallback
+    return "What would you like to focus on today?"
+
+
+def enhanced_generate_personalized_welcome_message(player_name: str, session_number: int, recent_summaries: list, is_returning: bool) -> tuple:
+    """
+    Generate two-part welcome message: greeting + follow-up
+    Returns: (greeting_message, followup_message, should_delay)
+    """
+    if not is_returning or not recent_summaries:
+        # NEW PLAYER - single message
+        return ("Hi! I'm Coach TA, your personal tennis coach. What's your name?", None, False)
+    
+    # RETURNING PLAYER - two message system
+    last_session = recent_summaries[0] if recent_summaries else {}
+    
+    # Generate smart greeting (Message 1)
+    player_record_id = st.session_state.get('player_record_id', '')
+    total_sessions = session_number  # Approximate
+    
+    greeting = generate_smart_greeting(player_name, player_record_id, last_session, total_sessions)
+    
+    # Generate follow-up message (Message 2)
+    session_tone = analyze_session_tone(last_session)
+    followup = generate_followup_message(player_name, last_session, session_tone)
+    
+    return (greeting, followup, True)  # True = should delay second message
+
 # ENHANCED: Welcome message generation with better context
-def generate_personalized_welcome_message(player_name: str, session_number: int, recent_summaries: list, is_returning: bool) -> str:
+def old_generate_personalized_welcome_message(player_name: str, session_number: int, recent_summaries: list, is_returning: bool) -> str:
     """
     Generate a concise, scannable welcome message for returning players
     """
@@ -1089,51 +1409,129 @@ def handle_introduction_sequence(user_message: str, claude_client):
 
 def setup_player_session_with_continuity(player_email: str):
     """
-    Enhanced player setup with proper continuity system - WITH COACH TA INTRO
+    Enhanced player setup with smart two-message welcome system
     """
     existing_player = find_player_by_email(player_email)
     
     if existing_player:
-        # Returning player
+        # RETURNING PLAYER
         player_data = existing_player['fields']
         st.session_state.player_record_id = existing_player['id']
         st.session_state.is_returning_player = True
         player_name = player_data.get('name', 'there')
         session_number = player_data.get('total_sessions', 0) + 1
         
+        # Load coaching history
         with st.spinner("Loading your coaching history..."):
             recent_summaries = get_player_recent_summaries(existing_player['id'], 2)
             st.session_state.coaching_history = recent_summaries
         
-        # Use the updated concise welcome message function
-        welcome_msg = generate_personalized_welcome_message(
+        # Generate two-part welcome message
+        greeting, followup, should_delay = enhanced_generate_personalized_welcome_message(
             player_name, 
             session_number, 
             recent_summaries, 
-            True  # is_returning = True
+            True
         )
         
+        # Store followup message for delayed sending
+        if should_delay and followup:
+            st.session_state.pending_followup = followup
+            st.session_state.followup_timer_start = time.time()
+            st.session_state.followup_sent = False
+        
+        # Update session count
         update_player_session_count(existing_player['id'])
+        
+        # Store player info for coaching context
+        st.session_state.player_name = player_name
+        st.session_state.player_level = player_data.get('tennis_level', 'Beginner')
+        
+        return greeting
         
     else:
         # NEW PLAYER
-        new_player = create_new_player(player_email, "", "")  # Empty name and level initially
+        new_player = create_new_player(player_email, "", "")
         
         if new_player:
             st.session_state.player_record_id = new_player['id']
             st.session_state.is_returning_player = False
             st.session_state.coaching_history = []
             
-            # Set introduction state
+            # Set introduction state for new players
             st.session_state.intro_state = "waiting_for_name"
             st.session_state.intro_completed = False
             
-            welcome_msg = "Hi! I'm Coach TA, your personal tennis coach. What's your name?"
+            # Clear any previous player info and pending messages
+            st.session_state.player_name = ""
+            st.session_state.player_level = ""
+            st.session_state.pending_followup = None
+            st.session_state.followup_sent = False
+            
+            return "Hi! I'm Coach TA, your personal tennis coach. What's your name?"
         else:
             st.error("Error creating player profile. Please try again.")
             return None
+
+def check_and_send_followup_message():
+    """
+    Check if it's time to send the followup message (5-second timer logic)
+    Returns: (should_send_followup, followup_message)
+    """
+    # Check if we have a pending followup
+    if not st.session_state.get('pending_followup') or st.session_state.get('followup_sent'):
+        return False, None
     
-    return welcome_msg
+    # Check if 5 seconds have passed
+    start_time = st.session_state.get('followup_timer_start', 0)
+    current_time = time.time()
+    
+    if current_time - start_time >= 5.0:  # 5 seconds
+        followup_msg = st.session_state.pending_followup
+        
+        # Mark as sent to prevent duplicate sending
+        st.session_state.followup_sent = True
+        st.session_state.pending_followup = None
+        
+        return True, followup_msg
+    
+    return False, None
+
+
+def handle_user_response_during_timer():
+    """
+    Handle when user responds before the 5-second timer
+    Returns: (should_send_followup_now, followup_message)
+    """
+    if st.session_state.get('pending_followup') and not st.session_state.get('followup_sent'):
+        followup_msg = st.session_state.pending_followup
+        
+        # Mark as sent and clear pending
+        st.session_state.followup_sent = True
+        st.session_state.pending_followup = None
+        
+        return True, followup_msg
+    
+    return False, None
+
+def log_welcome_messages(player_record_id: str, session_id: str, greeting_msg: str, followup_msg: str = None):
+    """
+    Log both welcome messages to the dual logging system
+    """
+    message_counter = 0
+    
+    # Log the greeting message
+    message_counter += 1
+    log_message_to_sss(player_record_id, session_id, message_counter, "assistant", greeting_msg)
+    log_message_to_conversation_log(player_record_id, session_id, message_counter, "assistant", greeting_msg)
+    
+    # Log the followup message if provided
+    if followup_msg:
+        message_counter += 1
+        log_message_to_sss(player_record_id, session_id, message_counter, "assistant", followup_msg)
+        log_message_to_conversation_log(player_record_id, session_id, message_counter, "assistant", followup_msg)
+    
+    return message_counter
 
 def get_current_player_info(player_record_id: str) -> tuple:
     """Retrieve current player name and level from database"""
@@ -1895,8 +2293,12 @@ def main():
             st.session_state.messages = []
             st.session_state.conversation_log = []
             st.session_state.player_setup_complete = False
+            st.session_state.pending_followup = None
+            st.session_state.followup_sent = False
+            st.session_state.recent_greetings = []
             st.rerun()
     
+    # PLAYER SETUP FORM
     if not st.session_state.get("player_setup_complete"):
         with st.form("player_setup"):
             st.markdown("### 🎾 Welcome to Tennis Coach AI")
@@ -1907,8 +2309,6 @@ def main():
                 placeholder="your.email@example.com",
                 help="Required for session continuity and progress tracking"
             )
-            
-            # REMOVED: player_name input field - Coach TA will collect this
             
             if st.form_submit_button("Start Coaching Session", type="primary"):
                 if not player_email:
@@ -1927,40 +2327,98 @@ def main():
                         session_id = str(uuid.uuid4())[:8]
                         st.session_state.session_id = session_id
                         st.session_state.messages = []
-                        st.session_state.message_counter = 0                        
+                        st.session_state.message_counter = 0
+                        
+                        # Add the greeting message
                         st.session_state.messages = [{"role": "assistant", "content": welcome_msg}]
                         
+                        # Log the initial welcome message
                         if st.session_state.get("player_record_id"):
-                            # DUAL LOGGING: Log welcome message to both tables
+                            st.session_state.message_counter = 1
                             log_message_to_sss(
                                 st.session_state.player_record_id,
                                 session_id,
-                                0,
+                                st.session_state.message_counter,
                                 "assistant",
                                 welcome_msg
                             )
                             log_message_to_conversation_log(
                                 st.session_state.player_record_id,
                                 session_id,
-                                0,
+                                st.session_state.message_counter,
                                 "assistant",
                                 welcome_msg
                             )
                         
-                        st.success(f"Welcome! Ready to start your coaching session.")
+                        st.success("Welcome! Ready to start your coaching session.")
                         st.rerun()
         return
     
+    # CHECK FOR PENDING FOLLOWUP MESSAGE (5-second timer)
+    should_send_followup, followup_message = check_and_send_followup_message()
+    if should_send_followup and followup_message:
+        # Add followup message to conversation
+        st.session_state.messages.append({"role": "assistant", "content": followup_message})
+        
+        # Log the followup message
+        if st.session_state.get("player_record_id"):
+            st.session_state.message_counter += 1
+            log_message_to_sss(
+                st.session_state.player_record_id,
+                st.session_state.session_id,
+                st.session_state.message_counter,
+                "assistant",
+                followup_message
+            )
+            log_message_to_conversation_log(
+                st.session_state.player_record_id,
+                st.session_state.session_id,
+                st.session_state.message_counter,
+                "assistant",
+                followup_message
+            )
+        
+        st.rerun()  # Refresh to show the followup message
+    
+    # DISPLAY CONVERSATION MESSAGES
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
     
+    # USER INPUT HANDLING
     if prompt := st.chat_input("Ask your tennis coach..."):
         # ADMIN MODE TRIGGER
         if prompt.strip().lower() == "hilly spike":
             st.session_state.admin_mode = True
             st.rerun()
             return
+        
+        # CHECK IF USER RESPONDED DURING TIMER - SEND FOLLOWUP NOW
+        should_send_immediate_followup, immediate_followup = handle_user_response_during_timer()
+        if should_send_immediate_followup and immediate_followup:
+            # Insert followup message before processing user input
+            with st.chat_message("assistant"):
+                st.markdown(immediate_followup)
+            
+            st.session_state.messages.append({"role": "assistant", "content": immediate_followup})
+            
+            # Log the followup message
+            if st.session_state.get("player_record_id"):
+                st.session_state.message_counter += 1
+                log_message_to_sss(
+                    st.session_state.player_record_id,
+                    st.session_state.session_id,
+                    st.session_state.message_counter,
+                    "assistant",
+                    immediate_followup
+                )
+                log_message_to_conversation_log(
+                    st.session_state.player_record_id,
+                    st.session_state.session_id,
+                    st.session_state.message_counter,
+                    "assistant",
+                    immediate_followup
+                )
         
         # Smart session end detection
         end_result = detect_session_end(prompt, st.session_state.messages)
@@ -2202,6 +2660,3 @@ def main():
                             "assistant",
                             error_msg
                         )
-
-if __name__ == "__main__":
-    main()
