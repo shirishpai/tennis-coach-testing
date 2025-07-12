@@ -2658,3 +2658,5 @@ def main():
                             "assistant",
                             error_msg
                         )
+if __name__ == "__main__":
+    main()
