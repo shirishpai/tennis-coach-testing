@@ -997,7 +997,7 @@ def assess_player_level_from_conversation(conversation_history: list, claude_cli
 
 def handle_introduction_sequence(user_message: str, claude_client):
     """
-    Enhanced introduction sequence with conversational level assessment
+    Enhanced introduction sequence with smooth conversational flow
     """
     intro_state = st.session_state.get("intro_state", "waiting_for_name")
     
@@ -1025,13 +1025,19 @@ def handle_introduction_sequence(user_message: str, claude_client):
             st.session_state.intro_state = "complete"
             return "Perfect! Let's get started. What would you like to work on today?"
         
-        # Check for clear "no" responses
-        no_responses = ["no", "nope", "not really", "not new", "been playing"]
-        if any(response in user_lower for response in no_responses):
-            st.session_state.intro_state = "asking_time"
-            return "How long have you been playing tennis?"
+        # Check for responses that indicate experience - skip time question and go to frequency
+        experience_indicators = [
+            "no", "nope", "not really", "not new", "been playing", 
+            "playing for", "year", "years", "months", "while now",
+            "some time", "a bit", "experienced"
+        ]
         
-        # Ambiguous response - probe more
+        if any(indicator in user_lower for indicator in experience_indicators):
+            # They have experience - skip time question, go straight to frequency
+            st.session_state.intro_state = "asking_frequency"
+            return "Great! How often do you play? Do you take lessons?"
+        
+        # Ambiguous response - ask for more details
         st.session_state.intro_state = "asking_time"
         return "Tell me a bit about your tennis experience - how long have you been playing?"
     
@@ -1041,7 +1047,7 @@ def handle_introduction_sequence(user_message: str, claude_client):
         # Quick check for obvious beginner time indicators
         beginner_time_phrases = [
             "few months", "couple months", "just started", "not long",
-            "recently", "6 months", "less than a year"
+            "recently", "6 months", "less than a year", "under a year"
         ]
         
         if any(phrase in user_lower for phrase in beginner_time_phrases):
@@ -1055,15 +1061,9 @@ def handle_introduction_sequence(user_message: str, claude_client):
             st.session_state.intro_state = "complete"
             return "Great! What would you like to work on today?"
         
-        # Check for 1+ year indicators
-        year_indicators = ["year", "years", "while", "long time"]
-        if any(indicator in user_lower for indicator in year_indicators):
-            st.session_state.intro_state = "asking_frequency"
-            return "Nice! How often do you play? Do you take lessons?"
-        
-        # Unclear time response - ask for frequency anyway
+        # Any other response goes to frequency question
         st.session_state.intro_state = "asking_frequency"  
-        return "How often do you get to play? Do you take lessons or work with a coach?"
+        return "Nice! How often do you get to play? Do you take lessons?"
     
     elif intro_state == "asking_frequency":
         # Now we have enough for assessment
