@@ -1241,271 +1241,270 @@ def main():
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
-    # REPLACE the user input section in main() with this corrected version:
-
-# USER INPUT HANDLING
-if prompt := st.chat_input("Ask your tennis coach..."):
-    # ADMIN MODE TRIGGER
-    if prompt.strip().lower() == "hilly spike":
-        st.session_state.admin_mode = True
-        st.rerun()
-        return
     
-    # CRITICAL FIX: Handle followup interruption FIRST, before processing user input
-    should_send_interrupt_followup, interrupt_followup = handle_user_response_during_timer()
-    
-    # Add user message to display immediately
-    with st.chat_message("user"):
-        st.markdown(prompt)
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    
-    # If there was a pending followup, send it now
-    if should_send_interrupt_followup and interrupt_followup:
-        with st.chat_message("assistant"):
-            st.markdown(interrupt_followup)
+    # USER INPUT HANDLING
+    if prompt := st.chat_input("Ask your tennis coach..."):
+        # ADMIN MODE TRIGGER
+        if prompt.strip().lower() == "hilly spike":
+            st.session_state.admin_mode = True
+            st.rerun()
+            return
         
-        st.session_state.messages.append({
-            "role": "assistant", 
-            "content": interrupt_followup
-        })
+        # CRITICAL FIX: Handle followup interruption FIRST, before processing user input
+        should_send_interrupt_followup, interrupt_followup = handle_user_response_during_timer()
         
-        # Log interrupt followup
-        if st.session_state.get("player_record_id"):
-            st.session_state.message_counter += 1
-            log_message_to_sss(
-                st.session_state.player_record_id,
-                st.session_state.session_id,
-                st.session_state.message_counter,
-                "assistant",
-                interrupt_followup
-            )
-            log_message_to_conversation_log(
-                st.session_state.player_record_id,
-                st.session_state.session_id,
-                st.session_state.message_counter,
-                "assistant",
-                interrupt_followup
-            )
-    
-    # Smart session end detection
-    end_result = detect_session_end(prompt, st.session_state.messages)
-    
-    if end_result['should_end']:
-        if end_result['needs_confirmation']:
-            st.session_state.pending_session_end = True
-            st.session_state.end_confidence = end_result['confidence']
-        else:
-            st.session_state.session_ending = True
-    
-    # Handle confirmation responses
-    if st.session_state.get("pending_session_end") and prompt.lower().strip() in ["yes", "y", "yeah", "yep", "sure"]:
-        st.session_state.session_ending = True
-        st.session_state.pending_session_end = False
-    elif st.session_state.get("pending_session_end") and prompt.lower().strip() in ["no", "n", "nope", "not yet", "continue"]:
-        st.session_state.pending_session_end = False
-    
-    st.session_state.message_counter += 1
-    
-    # Log user message
-    if st.session_state.get("player_record_id"):
-        log_message_to_sss(
-            st.session_state.player_record_id,
-            st.session_state.session_id,
-            st.session_state.message_counter,
-            "user",
-            prompt
-        )
-        log_message_to_conversation_log(
-            st.session_state.player_record_id,
-            st.session_state.session_id,
-            st.session_state.message_counter,
-            "user",
-            prompt
-        )
-    
-    # Handle introduction sequence for new players
-    if not st.session_state.get("intro_completed", True):
-        intro_response = handle_introduction_sequence(prompt, claude_client)
-        if intro_response:
+        # Add user message to display immediately
+        with st.chat_message("user"):
+            st.markdown(prompt)
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        
+        # If there was a pending followup, send it now
+        if should_send_interrupt_followup and interrupt_followup:
             with st.chat_message("assistant"):
-                st.markdown(intro_response)
+                st.markdown(interrupt_followup)
             
-            st.session_state.message_counter += 1
             st.session_state.messages.append({
                 "role": "assistant", 
-                "content": intro_response
+                "content": interrupt_followup
             })
             
-            # Log intro response
+            # Log interrupt followup
             if st.session_state.get("player_record_id"):
+                st.session_state.message_counter += 1
                 log_message_to_sss(
                     st.session_state.player_record_id,
                     st.session_state.session_id,
                     st.session_state.message_counter,
                     "assistant",
-                    intro_response
+                    interrupt_followup
                 )
                 log_message_to_conversation_log(
                     st.session_state.player_record_id,
                     st.session_state.session_id,
                     st.session_state.message_counter,
                     "assistant",
-                    intro_response
+                    interrupt_followup
                 )
-            return
-    
-    # Handle session end confirmation
-    if st.session_state.get("pending_session_end"):
-        confidence = st.session_state.get("end_confidence", "medium")
-        confirmation_msg = generate_session_end_confirmation(prompt, confidence)
         
-        with st.chat_message("assistant"):
-            st.markdown(confirmation_msg)
+        # Smart session end detection
+        end_result = detect_session_end(prompt, st.session_state.messages)
+        
+        if end_result['should_end']:
+            if end_result['needs_confirmation']:
+                st.session_state.pending_session_end = True
+                st.session_state.end_confidence = end_result['confidence']
+            else:
+                st.session_state.session_ending = True
+        
+        # Handle confirmation responses
+        if st.session_state.get("pending_session_end") and prompt.lower().strip() in ["yes", "y", "yeah", "yep", "sure"]:
+            st.session_state.session_ending = True
+            st.session_state.pending_session_end = False
+        elif st.session_state.get("pending_session_end") and prompt.lower().strip() in ["no", "n", "nope", "not yet", "continue"]:
+            st.session_state.pending_session_end = False
         
         st.session_state.message_counter += 1
-        st.session_state.messages.append({
-            "role": "assistant", 
-            "content": confirmation_msg
-        })
         
-        # Log confirmation message
+        # Log user message
         if st.session_state.get("player_record_id"):
             log_message_to_sss(
                 st.session_state.player_record_id,
                 st.session_state.session_id,
                 st.session_state.message_counter,
-                "assistant",
-                confirmation_msg
+                "user",
+                prompt
             )
             log_message_to_conversation_log(
                 st.session_state.player_record_id,
                 st.session_state.session_id,
                 st.session_state.message_counter,
-                "assistant",
-                confirmation_msg
+                "user",
+                prompt
             )
-        return
-    
-    # If session is ending, provide closing response
-    if st.session_state.get("session_ending"):
-        with st.chat_message("assistant"):
-            player_name = st.session_state.get("player_name", "")
-            closing_response = generate_dynamic_session_ending(st.session_state.messages, player_name)
-            st.markdown(closing_response)
-            
-            st.session_state.message_counter += 1
-            st.session_state.messages.append({
-                "role": "assistant", 
-                "content": closing_response
-            })
-            
-            # Log closing response
-            if st.session_state.get("player_record_id"):
-                log_message_to_sss(
-                    st.session_state.player_record_id,
-                    st.session_state.session_id,
-                    st.session_state.message_counter,
-                    "assistant",
-                    closing_response
-                )
-                log_message_to_conversation_log(
-                    st.session_state.player_record_id,
-                    st.session_state.session_id,
-                    st.session_state.message_counter,
-                    "assistant",
-                    closing_response
-                )
-            
-            # Show session end message
-            st.success("🎾 **Session Complete!** Thanks for training with Coach TA today.")
-            if st.button("🔄 Start New Session", type="primary"):
-                for key in list(st.session_state.keys()):
-                    if key not in ['player_email', 'player_record_id']:
-                        del st.session_state[key]
-                st.rerun()
-            return
-    
-    # Normal message processing (not ending) - WITH MESSAGE BREAKING
-    with st.chat_message("assistant"):
-        with st.spinner("Coach is thinking..."):
-            chunks = query_pinecone(index, prompt, top_k)
-            
-            if chunks:
-                coaching_history = st.session_state.get('coaching_history', [])
+        
+        # Handle introduction sequence for new players
+        if not st.session_state.get("intro_completed", True):
+            intro_response = handle_introduction_sequence(prompt, claude_client)
+            if intro_response:
+                with st.chat_message("assistant"):
+                    st.markdown(intro_response)
                 
-                # Get current player info
-                player_name = st.session_state.get("player_name", "")
-                player_level = st.session_state.get("player_level", "")
-                
-                full_prompt = build_clean_coaching_prompt(
-                    prompt, 
-                    chunks, 
-                    st.session_state.messages[:-1],
-                    player_name,
-                    player_level
-                )
-                
-                response = query_claude(claude_client, full_prompt)
-                
-                # Process response for natural breaking
-                first_msg, second_msg, should_delay = process_coaching_response(response)
-                
-                # Send first message
-                st.markdown(first_msg)
                 st.session_state.message_counter += 1
                 st.session_state.messages.append({
                     "role": "assistant", 
-                    "content": first_msg
+                    "content": intro_response
                 })
                 
-                # Log first message
+                # Log intro response
                 if st.session_state.get("player_record_id"):
                     log_message_to_sss(
                         st.session_state.player_record_id,
                         st.session_state.session_id,
                         st.session_state.message_counter,
                         "assistant",
-                        first_msg,
-                        chunks
+                        intro_response
                     )
                     log_message_to_conversation_log(
                         st.session_state.player_record_id,
                         st.session_state.session_id,
                         st.session_state.message_counter,
                         "assistant",
-                        first_msg,
-                        chunks
+                        intro_response
                     )
+                return
+        
+        # Handle session end confirmation
+        if st.session_state.get("pending_session_end"):
+            confidence = st.session_state.get("end_confidence", "medium")
+            confirmation_msg = generate_session_end_confirmation(prompt, confidence)
+            
+            with st.chat_message("assistant"):
+                st.markdown(confirmation_msg)
+            
+            st.session_state.message_counter += 1
+            st.session_state.messages.append({
+                "role": "assistant", 
+                "content": confirmation_msg
+            })
+            
+            # Log confirmation message
+            if st.session_state.get("player_record_id"):
+                log_message_to_sss(
+                    st.session_state.player_record_id,
+                    st.session_state.session_id,
+                    st.session_state.message_counter,
+                    "assistant",
+                    confirmation_msg
+                )
+                log_message_to_conversation_log(
+                    st.session_state.player_record_id,
+                    st.session_state.session_id,
+                    st.session_state.message_counter,
+                    "assistant",
+                    confirmation_msg
+                )
+            return
+        
+        # If session is ending, provide closing response
+        if st.session_state.get("session_ending"):
+            with st.chat_message("assistant"):
+                player_name = st.session_state.get("player_name", "")
+                closing_response = generate_dynamic_session_ending(st.session_state.messages, player_name)
+                st.markdown(closing_response)
                 
-                # If there's a second message, set it up for delayed sending
-                if second_msg:
-                    st.session_state.pending_second_message = second_msg
-                    st.session_state.second_message_chunks = chunks
-                    st.session_state.second_message_timer = time.time()
-                
-            else:
-                error_msg = "Could you rephrase that? I want to give you the best coaching advice possible."
-                st.markdown(error_msg)
                 st.session_state.message_counter += 1
+                st.session_state.messages.append({
+                    "role": "assistant", 
+                    "content": closing_response
+                })
                 
-                st.session_state.messages.append({"role": "assistant", "content": error_msg})
-                
-                # Log error message
+                # Log closing response
                 if st.session_state.get("player_record_id"):
                     log_message_to_sss(
                         st.session_state.player_record_id,
                         st.session_state.session_id,
                         st.session_state.message_counter,
                         "assistant",
-                        error_msg
+                        closing_response
                     )
                     log_message_to_conversation_log(
                         st.session_state.player_record_id,
                         st.session_state.session_id,
                         st.session_state.message_counter,
                         "assistant",
-                        error_msg
+                        closing_response
                     )
+                
+                # Show session end message
+                st.success("🎾 **Session Complete!** Thanks for training with Coach TA today.")
+                if st.button("🔄 Start New Session", type="primary"):
+                    for key in list(st.session_state.keys()):
+                        if key not in ['player_email', 'player_record_id']:
+                            del st.session_state[key]
+                    st.rerun()
+                return
+        
+        # Normal message processing (not ending) - WITH MESSAGE BREAKING
+        with st.chat_message("assistant"):
+            with st.spinner("Coach is thinking..."):
+                chunks = query_pinecone(index, prompt, top_k)
+                
+                if chunks:
+                    coaching_history = st.session_state.get('coaching_history', [])
+                    
+                    # Get current player info
+                    player_name = st.session_state.get("player_name", "")
+                    player_level = st.session_state.get("player_level", "")
+                    
+                    full_prompt = build_clean_coaching_prompt(
+                        prompt, 
+                        chunks, 
+                        st.session_state.messages[:-1],
+                        player_name,
+                        player_level
+                    )
+                    
+                    response = query_claude(claude_client, full_prompt)
+                    
+                    # Process response for natural breaking
+                    first_msg, second_msg, should_delay = process_coaching_response(response)
+                    
+                    # Send first message
+                    st.markdown(first_msg)
+                    st.session_state.message_counter += 1
+                    st.session_state.messages.append({
+                        "role": "assistant", 
+                        "content": first_msg
+                    })
+                    
+                    # Log first message
+                    if st.session_state.get("player_record_id"):
+                        log_message_to_sss(
+                            st.session_state.player_record_id,
+                            st.session_state.session_id,
+                            st.session_state.message_counter,
+                            "assistant",
+                            first_msg,
+                            chunks
+                        )
+                        log_message_to_conversation_log(
+                            st.session_state.player_record_id,
+                            st.session_state.session_id,
+                            st.session_state.message_counter,
+                            "assistant",
+                            first_msg,
+                            chunks
+                        )
+                    
+                    # If there's a second message, set it up for delayed sending
+                    if second_msg:
+                        st.session_state.pending_second_message = second_msg
+                        st.session_state.second_message_chunks = chunks
+                        st.session_state.second_message_timer = time.time()
+                    
+                else:
+                    error_msg = "Could you rephrase that? I want to give you the best coaching advice possible."
+                    st.markdown(error_msg)
+                    st.session_state.message_counter += 1
+                    
+                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                    
+                    # Log error message
+                    if st.session_state.get("player_record_id"):
+                        log_message_to_sss(
+                            st.session_state.player_record_id,
+                            st.session_state.session_id,
+                            st.session_state.message_counter,
+                            "assistant",
+                            error_msg
+                        )
+                        log_message_to_conversation_log(
+                            st.session_state.player_record_id,
+                            st.session_state.session_id,
+                            st.session_state.message_counter,
+                            "assistant",
+                            error_msg
+                        )
 
 if __name__ == "__main__":
     main()
