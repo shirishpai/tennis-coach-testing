@@ -2196,10 +2196,10 @@ def display_admin_interface():
                 with st.spinner("Loading sandbox..."):
                     display_rag_sandbox_interface(index, claude_client, get_embedding)
                 
-    except Exception as e:
-        st.error(f"RAG Sandbox error: {e}")
-        import traceback
-        st.code(traceback.format_exc())
+        except Exception as e:
+            st.error(f"RAG Sandbox error: {e}")
+            import traceback
+            st.code(traceback.format_exc())
     
     # Exit admin mode
     st.markdown("---")
