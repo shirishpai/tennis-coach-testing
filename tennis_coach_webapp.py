@@ -1082,7 +1082,7 @@ def old_generate_personalized_welcome_message(player_name: str, session_number: 
 
 # ENHANCED: Build conversational prompt with coaching history
 def build_conversational_prompt_with_history(user_question: str, context_chunks: list, conversation_history: list, coaching_history: list = None, player_name: str = None, player_level: str = None) -> str:
-    """Build Claude prompt with proper player context and memory"""
+    """Enhanced coaching prompt that encourages natural message breaking"""
     
     # Check if this is intro
     is_intro = not st.session_state.get("intro_completed", True)
@@ -1093,17 +1093,13 @@ def build_conversational_prompt_with_history(user_question: str, context_chunks:
 
 INTRODUCTION FLOW:
 - Start: "Hi! I'm Coach TA, your personal tennis coach. What's your name?"
-- After name: "Nice to meet you, [Name]! I am excited, tell me about your tennis. You been playing long?"
-- After experience: "What's challenging you most on court right now?"
-- Then transition: "Great! How about we work on [specific area] today?"
-
-Keep responses SHORT (1-2 sentences max). Be enthusiastic but concise."""
+- After name: "Nice to meet you, [Name]! Are you pretty new to tennis?"
+- Keep responses SHORT (1-2 sentences max). Be enthusiastic but concise."""
         
-        # Add current conversation context for intro
         history_text = ""
         if conversation_history:
             history_text = "\nCurrent conversation:\n"
-            for msg in conversation_history[-6:]:  # Last 6 exchanges
+            for msg in conversation_history[-6:]:
                 role = "Player" if msg['role'] == 'user' else "Coach TA"
                 history_text += f"{role}: {msg['content']}\n"
         
@@ -1119,7 +1115,7 @@ Player says: "{user_question}"
 Respond naturally as Coach TA:"""
     
     else:
-        # REGULAR COACHING PROMPT WITH FULL CONTEXT
+        # ENHANCED COACHING PROMPT FOR MESSAGE BREAKING
         player_context = ""
         if player_name and player_level:
             player_context = f"Player: {player_name} (Level: {player_level})\n"
@@ -1127,36 +1123,40 @@ Respond naturally as Coach TA:"""
         coaching_prompt = f"""You are Coach TA coaching {player_name or 'the player'}.
 {player_context}
 
-You provide direct, actionable tennis coaching advice. 
+CRITICAL RESPONSE FORMAT - Choose ONE of these patterns:
 
-COACHING APPROACH:
-- Ask 1-2 quick questions about their specific situation
-- Give ONE specific tip or drill appropriate for {player_level or 'their current'} level  
-- End with encouragement like "How about we try this?" or "Sound good?"
-- Keep responses SHORT (2-3 sentences total)
+PATTERN 1 - Single Short Response (for simple questions):
+Give ONE focused tip in 1-2 sentences, end with a follow-up question.
+
+PATTERN 2 - Natural Two-Part Response (for complex topics):
+Use this EXACT format with the break marker:
+
+[First part: Give the main tip/advice]
+***BREAK***
+[Second part: Drill/next step + encouraging question]
+
+COACHING GUIDELINES:
+- Focus on {player_level or 'their current'} level advice
 - Be encouraging and practical
-- Focus on actionable advice they can practice alone
+- Give actionable advice they can practice alone
+- If using PATTERN 2, make each part feel complete but connected
 
 MEMORY RULES:
-- NEVER ask about their level - you know they are {player_level or 'at their current level'}
-- NEVER ask their name - you are coaching {player_name or 'this player'}
-- Remember what you suggested earlier in this session
+- You know {player_name or 'this player'} is {player_level or 'at their current level'}
+- Don't repeat what you've already covered this session
+- Build on previous advice
 
-NEVER say "Hi there" or greet again - you're already in conversation.
-NEVER include meta-commentary about your process.
-Just give direct coaching advice."""
-        
-        # Add previous session context
-        history_text = ""
-        if coaching_history and len(coaching_history) > 0:
-            last_session = coaching_history[0]
-            if last_session.get('technical_focus'):
-                history_text += f"\nPrevious session focus: {last_session['technical_focus']}"
+RESPONSE LENGTH:
+- Single response: 1-2 sentences maximum
+- Two-part response: Each part should be 1-2 sentences
+
+Choose the pattern that best fits their question complexity."""
         
         # Add current conversation context
+        history_text = ""
         if conversation_history and len(conversation_history) > 1:
             history_text += "\nCurrent session conversation:\n"
-            for msg in conversation_history[-10:]:  # Last 10 exchanges to maintain context
+            for msg in conversation_history[-8:]:
                 role = "Player" if msg['role'] == 'user' else "Coach TA"
                 history_text += f"{role}: {msg['content']}\n"
         
@@ -1169,7 +1169,131 @@ Tennis Knowledge: {context_text}
 
 Player says: "{user_question}"
 
-Give direct coaching advice:"""
+Respond as Coach TA using the appropriate pattern:"""
+
+def process_coaching_response(response_text: str) -> tuple:
+    """
+    Process Claude's response and break into natural parts if needed
+    Returns: (first_message, second_message, should_delay)
+    """
+    response_text = response_text.strip()
+    
+    # Check if Claude used the natural break marker
+    if "***BREAK***" in response_text:
+        parts = response_text.split("***BREAK***")
+        if len(parts) == 2:
+            first_msg = parts[0].strip()
+            second_msg = parts[1].strip()
+            return (first_msg, second_msg, True)
+    
+    # If no break marker, check if we should auto-break long responses
+    word_count = len(response_text.split())
+    
+    if word_count > 50:  # If response is long, try to break it naturally
+        sentences = response_text.split('. ')
+        
+        if len(sentences) >= 3:
+            # Find a good breaking point (around middle, but at sentence boundary)
+            mid_point = len(sentences) // 2
+            
+            # Look for natural break indicators
+            for i in range(mid_point - 1, min(len(sentences), mid_point + 2)):
+                sentence = sentences[i].lower()
+                
+                # Break before questions
+                if any(word in sentence for word in ['?', 'how', 'what', 'can you', 'try']):
+                    first_part = '. '.join(sentences[:i])
+                    second_part = '. '.join(sentences[i:])
+                    
+                    # Add periods if missing
+                    if first_part and not first_part.endswith('.'):
+                        first_part += '.'
+                    if second_part and not second_part.endswith('.') and not second_part.endswith('?'):
+                        second_part += '.'
+                    
+                    return (first_part, second_part, True)
+        
+        # If no good breaking point found, break at sentence boundary near middle
+        if len(sentences) >= 2:
+            mid_sentence = len(sentences) // 2
+            first_part = '. '.join(sentences[:mid_sentence])
+            second_part = '. '.join(sentences[mid_sentence:])
+            
+            # Add periods if missing
+            if first_part and not first_part.endswith('.'):
+                first_part += '.'
+            if second_part and not second_part.endswith('.') and not second_part.endswith('?'):
+                second_part += '.'
+            
+            return (first_part, second_part, True)
+    
+    # Return as single message if short or couldn't break naturally
+    return (response_text, None, False)
+
+
+def send_coaching_response_with_delay(first_msg: str, second_msg: str = None):
+    """
+    Send coaching response(s) with natural timing
+    """
+    import time
+    
+    # Send first message
+    with st.chat_message("assistant"):
+        st.markdown(first_msg)
+    
+    st.session_state.messages.append({
+        "role": "assistant", 
+        "content": first_msg
+    })
+    
+    # Log first message
+    if st.session_state.get("player_record_id"):
+        st.session_state.message_counter += 1
+        log_message_to_sss(
+            st.session_state.player_record_id,
+            st.session_state.session_id,
+            st.session_state.message_counter,
+            "assistant",
+            first_msg
+        )
+        log_message_to_conversation_log(
+            st.session_state.player_record_id,
+            st.session_state.session_id,
+            st.session_state.message_counter,
+            "assistant",
+            first_msg
+        )
+    
+    # If there's a second message, send it after a delay
+    if second_msg:
+        # Add a small delay to feel natural
+        time.sleep(1.5)
+        
+        with st.chat_message("assistant"):
+            st.markdown(second_msg)
+        
+        st.session_state.messages.append({
+            "role": "assistant", 
+            "content": second_msg
+        })
+        
+        # Log second message
+        if st.session_state.get("player_record_id"):
+            st.session_state.message_counter += 1
+            log_message_to_sss(
+                st.session_state.player_record_id,
+                st.session_state.session_id,
+                st.session_state.message_counter,
+                "assistant",
+                second_msg
+            )
+            log_message_to_conversation_log(
+                st.session_state.player_record_id,
+                st.session_state.session_id,
+                st.session_state.message_counter,
+                "assistant",
+                second_msg
+            )
 
 def extract_name_from_response(user_message: str) -> str:
     """
@@ -2304,9 +2428,10 @@ def main():
             st.session_state.messages = []
             st.session_state.conversation_log = []
             st.session_state.player_setup_complete = False
-            st.session_state.pending_followup = None
-            st.session_state.followup_sent = False
-            st.session_state.recent_greetings = []
+            # Clear message breaking state
+            st.session_state.pending_second_message = None
+            st.session_state.second_message_chunks = None
+            st.session_state.second_message_timer = None
             st.rerun()
     
     # PLAYER SETUP FORM
@@ -2365,31 +2490,47 @@ def main():
                         st.rerun()
         return
     
-    # CHECK FOR PENDING FOLLOWUP MESSAGE (5-second timer)
-    should_send_followup, followup_message = check_and_send_followup_message()
-    if should_send_followup and followup_message:
-        # Add followup message to conversation
-        st.session_state.messages.append({"role": "assistant", "content": followup_message})
+    # CHECK FOR PENDING SECOND MESSAGE (1.5-second timer)
+    if st.session_state.get('pending_second_message'):
+        start_time = st.session_state.get('second_message_timer', 0)
+        current_time = time.time()
         
-        # Log the followup message
-        if st.session_state.get("player_record_id"):
-            st.session_state.message_counter += 1
-            log_message_to_sss(
-                st.session_state.player_record_id,
-                st.session_state.session_id,
-                st.session_state.message_counter,
-                "assistant",
-                followup_message
-            )
-            log_message_to_conversation_log(
-                st.session_state.player_record_id,
-                st.session_state.session_id,
-                st.session_state.message_counter,
-                "assistant",
-                followup_message
-            )
-        
-        st.rerun()  # Refresh to show the followup message
+        if current_time - start_time >= 1.5:  # 1.5 seconds delay
+            second_msg = st.session_state.pending_second_message
+            chunks = st.session_state.get('second_message_chunks', [])
+            
+            # Send second message
+            st.session_state.messages.append({
+                "role": "assistant", 
+                "content": second_msg
+            })
+            
+            # Log second message
+            if st.session_state.get("player_record_id"):
+                st.session_state.message_counter += 1
+                log_message_to_sss(
+                    st.session_state.player_record_id,
+                    st.session_state.session_id,
+                    st.session_state.message_counter,
+                    "assistant",
+                    second_msg,
+                    chunks
+                )
+                log_message_to_conversation_log(
+                    st.session_state.player_record_id,
+                    st.session_state.session_id,
+                    st.session_state.message_counter,
+                    "assistant",
+                    second_msg,
+                    chunks
+                )
+            
+            # Clear pending message
+            st.session_state.pending_second_message = None
+            st.session_state.second_message_chunks = None
+            st.session_state.second_message_timer = None
+            
+            st.rerun()  # Refresh to show the second message
     
     # DISPLAY CONVERSATION MESSAGES
     for message in st.session_state.messages:
@@ -2404,43 +2545,14 @@ def main():
             st.rerun()
             return
         
-        # CHECK IF USER RESPONDED DURING TIMER - SEND FOLLOWUP NOW
-        should_send_immediate_followup, immediate_followup = handle_user_response_during_timer()
-        if should_send_immediate_followup and immediate_followup:
-            # Insert followup message before processing user input
-            with st.chat_message("assistant"):
-                st.markdown(immediate_followup)
-            
-            st.session_state.messages.append({"role": "assistant", "content": immediate_followup})
-            
-            # Log the followup message
-            if st.session_state.get("player_record_id"):
-                st.session_state.message_counter += 1
-                log_message_to_sss(
-                    st.session_state.player_record_id,
-                    st.session_state.session_id,
-                    st.session_state.message_counter,
-                    "assistant",
-                    immediate_followup
-                )
-                log_message_to_conversation_log(
-                    st.session_state.player_record_id,
-                    st.session_state.session_id,
-                    st.session_state.message_counter,
-                    "assistant",
-                    immediate_followup
-                )
-        
         # Smart session end detection
         end_result = detect_session_end(prompt, st.session_state.messages)
         
         if end_result['should_end']:
             if end_result['needs_confirmation']:
-                # Set confirmation state instead of ending immediately
                 st.session_state.pending_session_end = True
                 st.session_state.end_confidence = end_result['confidence']
             else:
-                # High confidence - end immediately
                 st.session_state.session_ending = True
         
         # Handle confirmation responses
@@ -2474,8 +2586,8 @@ def main():
         
         st.session_state.messages.append({"role": "user", "content": prompt})
         
-        # NEW: Handle introduction sequence for new players
-        if not st.session_state.get("intro_completed", True):  # True for returning players
+        # Handle introduction sequence for new players
+        if not st.session_state.get("intro_completed", True):
             intro_response = handle_introduction_sequence(prompt, claude_client)
             if intro_response:
                 with st.chat_message("assistant"):
@@ -2503,7 +2615,7 @@ def main():
                         "assistant",
                         intro_response
                     )
-                return  # Don't process as normal coaching message yet
+                return
         
         # Handle session end confirmation
         if st.session_state.get("pending_session_end"):
@@ -2540,12 +2652,10 @@ def main():
         # If session is ending, provide closing response and mark as completed
         if st.session_state.get("session_ending"):
             with st.chat_message("assistant"):
-                # Get player name for personalized ending message
                 player_name, _ = get_current_player_info(st.session_state.get("player_record_id", ""))
                 closing_response = generate_dynamic_session_ending(st.session_state.messages, player_name)
                 st.markdown(closing_response)
                 
-                # Log closing response
                 st.session_state.message_counter += 1
                 st.session_state.messages.append({
                     "role": "assistant", 
@@ -2588,7 +2698,8 @@ def main():
                             if summary_created:
                                 st.success("📝 Session summary generated and saved!")
                             else:
-                                st.warning("⚠️ Session completed but summary generation had issues.")                
+                                st.warning("⚠️ Session completed but summary generation had issues.")
+                                
                 # Show session end message
                 st.success("🎾 **Session Complete!** Thanks for training with Coach TA today.")
                 if st.button("🔄 Start New Session", type="primary"):
@@ -2598,7 +2709,7 @@ def main():
                     st.rerun()
                 return
         
-        # Normal message processing (not ending)
+        # Normal message processing (not ending) - WITH MESSAGE BREAKING
         with st.chat_message("assistant"):
             with st.spinner("Coach is thinking..."):
                 chunks = query_pinecone(index, prompt, top_k)
@@ -2620,23 +2731,25 @@ def main():
                     
                     response = query_claude(claude_client, full_prompt)
                     
-                    st.markdown(response)
+                    # NEW: Process response for natural breaking
+                    first_msg, second_msg, should_delay = process_coaching_response(response)
                     
+                    # Send first message
+                    st.markdown(first_msg)
                     st.session_state.message_counter += 1
-                    
                     st.session_state.messages.append({
                         "role": "assistant", 
-                        "content": response
+                        "content": first_msg
                     })
                     
-                    # DUAL LOGGING: Log coach response with chunks to both tables
+                    # Log first message
                     if st.session_state.get("player_record_id"):
                         log_message_to_sss(
                             st.session_state.player_record_id,
                             st.session_state.session_id,
                             st.session_state.message_counter,
                             "assistant",
-                            response,
+                            first_msg,
                             chunks
                         )
                         log_message_to_conversation_log(
@@ -2644,9 +2757,15 @@ def main():
                             st.session_state.session_id,
                             st.session_state.message_counter,
                             "assistant",
-                            response,
+                            first_msg,
                             chunks
                         )
+                    
+                    # If there's a second message, set it up for delayed sending
+                    if second_msg:
+                        st.session_state.pending_second_message = second_msg
+                        st.session_state.second_message_chunks = chunks
+                        st.session_state.second_message_timer = time.time()
                     
                 else:
                     error_msg = "Could you rephrase that? I want to give you the best coaching advice possible."
@@ -2655,7 +2774,7 @@ def main():
                     
                     st.session_state.messages.append({"role": "assistant", "content": error_msg})
                     
-                    # DUAL LOGGING: Log error message to both tables
+                    # Log error message
                     if st.session_state.get("player_record_id"):
                         log_message_to_sss(
                             st.session_state.player_record_id,
