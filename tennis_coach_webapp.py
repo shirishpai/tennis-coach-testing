@@ -2177,14 +2177,44 @@ def display_admin_interface():
                                                 st.text(msg['resource_details'])
                 else:
                     st.warning("No sessions found for this player.")
+    
     with tab3:
-        # RAG Sandbox tab
+        # RAG Sandbox Debug
+        import os
+        import sys
+        
+        st.markdown("# 🔍 File System Debug")
+        st.write("**Current working directory:**", os.getcwd())
+        st.write("**Files in current directory:**")
+        
         try:
-            from rag_sandbox import display_rag_sandbox_interface
-            display_rag_sandbox_interface(index, claude_client, get_embedding)
+            files = os.listdir('.')
+            for file in sorted(files):
+                if file.endswith('.py'):
+                    st.write(f"🐍 {file}")
+                else:
+                    st.write(f"📄 {file}")
         except Exception as e:
-            st.error(f"RAG Sandbox error: {e}")
-            st.info("The RAG Sandbox is under development. Please check back later.")
+            st.error(f"Error listing files: {e}")
+        
+        st.write("**Python path:**")
+        for path in sys.path:
+            st.write(f"📁 {path}")
+        
+        # Test if we can see the file
+        if os.path.exists('rag_sandbox.py'):
+            st.success("✅ rag_sandbox.py file found!")
+            # Try to read first few lines
+            try:
+                with open('rag_sandbox.py', 'r') as f:
+                    first_lines = f.readlines()[:5]
+                    st.write("**First 5 lines of rag_sandbox.py:**")
+                    for i, line in enumerate(first_lines, 1):
+                        st.code(f"{i}: {line.strip()}")
+            except Exception as e:
+                st.error(f"Error reading file: {e}")
+        else:
+            st.error("❌ rag_sandbox.py file NOT found!")
     
     # Exit admin mode
     st.markdown("---")
