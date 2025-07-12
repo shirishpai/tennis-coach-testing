@@ -6,6 +6,7 @@ import time
 import pandas as pd          # NEW
 import re
 from datetime import datetime # NEW
+from rag_sandbox import display_rag_sandbox_interface
 
 try:
     from pinecone import Pinecone
@@ -1952,7 +1953,7 @@ def display_admin_interface():
     st.markdown("---")
     
     # Create tabs for different views
-    tab1, tab2 = st.tabs(["📊 All Sessions", "👥 Player Engagement"])
+    tab1, tab2, tab3 = st.tabs(["📊 All Sessions", "👥 Player Engagement", "🧪 RAG Sandbox"])
     
     with tab1:
         # Session overview from Active_Sessions
@@ -2173,6 +2174,9 @@ def display_admin_interface():
                                                 st.text(msg['resource_details'])
                 else:
                     st.warning("No sessions found for this player.")
+    with tab3:
+        # RAG Sandbox tab
+        display_rag_sandbox_interface(index, claude_client, get_embedding)
     
     # Exit admin mode
     st.markdown("---")
