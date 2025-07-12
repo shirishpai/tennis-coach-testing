@@ -2215,14 +2215,6 @@ def main():
         initial_sidebar_state="collapsed"
     )
     
-    # CHECK FOR ADMIN MODE FIRST
-    if st.session_state.get('admin_mode', False):
-        st.error("DEBUG: About to call admin interface")
-        st.write(f"Index type: {type(index)}")
-        st.write(f"Claude client type: {type(claude_client)}")
-        display_admin_interface(index, claude_client)
-        return
-    
     st.title("🎾 Tennis Coach AI")
     st.markdown("*Your personal tennis coaching assistant*")
     st.markdown("---")
@@ -2230,22 +2222,19 @@ def main():
     with st.spinner("Connecting to tennis coaching database..."):
         index, claude_client = setup_connections()
     
-        # Debug the connection results
-        st.write(f"setup_connections returned: index={index}, claude_client={claude_client}")
-    
-        if index is None:
-            st.error("Index is None!")
-        if claude_client is None:
-            st.error("Claude client is None!")
-    
     if not index or not claude_client:
         st.error("Failed to connect to coaching systems. Please check API keys.")
         st.stop()
     
+    # CHECK FOR ADMIN MODE AFTER CONNECTIONS ARE ESTABLISHED
+    if st.session_state.get('admin_mode', False):
+        display_admin_interface(index, claude_client)
+        return
+    
     with st.sidebar:
         st.header("🔧 Admin Controls")
         top_k = st.slider("Coaching resources", 1, 8, 3, key="coaching_resources_slider")
-    
+        
         if st.button("🔄 New Session"):
             st.session_state.messages = []
             st.session_state.conversation_log = []
@@ -2587,6 +2576,7 @@ def main():
                             "assistant",
                             error_msg
                         )
+
 
 if __name__ == "__main__":
     main()
