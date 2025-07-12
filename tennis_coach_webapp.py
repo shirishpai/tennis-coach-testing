@@ -1173,21 +1173,34 @@ Give direct coaching advice:"""
 
 def extract_name_from_response(user_message: str) -> str:
     """
-    Extract player name from their response to "What's your name?"
+    Extract player name from their response with better cleanup
     """
-    # Simple extraction - look for common patterns
     message = user_message.strip()
     
-    # Handle common responses
+    def clean_name(raw_name):
+        """Clean extracted name by removing everything after punctuation"""
+        # Remove everything after comma, period, question mark, exclamation, etc.
+        for punct in [',', '.', '?', '!', ';', ':', ' and ', ' but ', ' how ', ' what ', ' where ']:
+            if punct in raw_name:
+                raw_name = raw_name.split(punct)[0]
+        return raw_name.strip().title()
+    
+    # Handle common response patterns
     if message.lower().startswith(("i'm ", "im ", "i am ")):
-        return message.split(" ", 2)[2] if len(message.split()) > 2 else message.split(" ", 1)[1]
+        raw_name = message.split(" ", 2)[2] if len(message.split()) > 2 else message.split(" ", 1)[1]
+        return clean_name(raw_name)
+    
     elif message.lower().startswith(("my name is ", "name is ")):
-        return message.split("is ", 1)[1]
+        raw_name = message.split("is ", 1)[1]
+        return clean_name(raw_name)
+    
     elif message.lower().startswith(("call me ", "it's ", "its ")):
-        return message.split(" ", 1)[1]
+        raw_name = message.split(" ", 1)[1]
+        return clean_name(raw_name)
+    
     else:
-        # Assume the whole message is the name (most common case)
-        return message.title()
+        # Assume the whole message is the name, but clean it
+        return clean_name(message)
 
 def assess_player_level_from_conversation(conversation_history: list, claude_client) -> str:
     """
