@@ -872,36 +872,132 @@ def extract_name_from_response(user_message: str) -> str:
         return message.title()
 
 def assess_player_level_from_conversation(conversation_history: list, claude_client) -> str:
-    # Extract player responses
+    """
+    Simple conversational assessment - when in doubt, default to Beginner
+    """
+    # Extract player responses only (skip the name collection)
     player_responses = []
     for msg in conversation_history:
         if msg["role"] == "user":
             player_responses.append(msg["content"])
     
     if len(player_responses) < 2:
-        return "Beginner"
+        return "Beginner"  # Default for insufficient data
     
-    # Combine all tennis-related responses
+    # Combine all tennis-related responses (skip first which is usually name)
     all_responses = " ".join(player_responses[1:]).lower()
     
-    # Smart logic-based assessment
-    advanced_indicators = ["kick serve", "slice serve", "topspin", "years", "competitive", "tournament", "league", "advanced", "intermediate"]
-    intermediate_indicators = ["year", "months", "consistent", "working on", "improving", "regular"]
+    # STEP 1: Check for explicit beginner indicators
+    beginner_phrases = [
+        "just started", "new to tennis", "beginner", "never played", 
+        "first time", "starting out", "very new", "complete beginner"
+    ]
     
-    # Check for advanced indicators
-    if any(indicator in all_responses for indicator in advanced_indicators):
-        return "Advanced"
+    if any(phrase in all_responses for phrase in beginner_phrases):
+        return "Beginner"
     
-    # Check for intermediate indicators  
-    if any(indicator in all_responses for indicator in intermediate_indicators):
-        return "Intermediate"
+    # STEP 2: Look for time indicators  
+    import re
     
-    # Default to beginner
+    # Look for "less than" patterns that indicate beginner
+    less_than_patterns = [
+        r"less than.*year", r"under.*year", r"not even.*year",
+        r"few months", r"couple.*months", r"\d+.*months"
+    ]
+    
+    if any(re.search(pattern, all_responses) for pattern in less_than_patterns):
+        return "Beginner"
+    
+    # Look for specific month mentions (if 6 months or less = beginner)
+    month_numbers = re.findall(r'(\d+)\s*months?', all_responses)
+    if month_numbers:
+        max_months = max(int(month) for month in month_numbers)
+        if max_months < 12:  # Less than a year
+            return "Beginner"
+    
+    # STEP 3: Look for year indicators
+    year_patterns = [
+        r'(\d+)\s*years?', r'(\d+)\s*yrs?', 
+        r'about\s*(\d+)\s*years?', r'around\s*(\d+)\s*years?',
+        r'over\s*(\d+)\s*years?', r'more than\s*(\d+)\s*years?'
+    ]
+    
+    years_mentioned = []
+    for pattern in year_patterns:
+        matches = re.findall(pattern, all_responses)
+        years_mentioned.extend([int(match) for match in matches])
+    
+    # If less than 1 year mentioned, still beginner
+    if years_mentioned and max(years_mentioned) < 1:
+        return "Beginner"
+    
+    # STEP 4: If 1+ years mentioned, check frequency and lessons
+    if years_mentioned and max(years_mentioned) >= 1:
+        
+        # Check for regular play indicators
+        regular_play_indicators = [
+            "weekly", "twice a week", "regularly", "every week",
+            "few times a month", "often", "frequent"
+        ]
+        
+        occasional_play_indicators = [
+            "occasionally", "sometimes", "not often", "when i can",
+            "here and there", "once in a while", "rarely"
+        ]
+        
+        # Check for lesson indicators
+        lesson_indicators = [
+            "lessons", "coach", "instructor", "teaching", "coached",
+            "take lessons", "have a coach", "work with"
+        ]
+        
+        no_lesson_indicators = [
+            "no lessons", "no coach", "never had lessons", "self taught",
+            "just with friends", "on my own"
+        ]
+        
+        has_regular_play = any(indicator in all_responses for indicator in regular_play_indicators)
+        has_occasional_play = any(indicator in all_responses for indicator in occasional_play_indicators)
+        has_lessons = any(indicator in all_responses for indicator in lesson_indicators)
+        no_lessons = any(indicator in all_responses for indicator in no_lesson_indicators)
+        
+        # Decision logic for 1+ year players
+        if has_regular_play and has_lessons:
+            return "Intermediate"
+        elif has_regular_play and not no_lessons:  # Regular play, lessons unclear
+            return "Intermediate"
+        elif has_lessons and not has_occasional_play:  # Has lessons, frequency unclear
+            return "Intermediate"
+        elif has_occasional_play and no_lessons:  # Occasional + no lessons
+            return "Beginner"
+        else:
+            # When in doubt for 1+ year players, lean toward Intermediate
+            # since they've stuck with it for over a year
+            return "Intermediate"
+    
+    # STEP 5: Look for other experience indicators if no clear time mentioned
+    experience_indicators = [
+        "experience", "played before", "been playing", "familiar with",
+        "know the basics", "comfortable with"
+    ]
+    
+    if any(indicator in all_responses for indicator in experience_indicators):
+        # Some experience mentioned but unclear - check for advanced concepts
+        advanced_concepts = [
+            "strategy", "tactics", "consistency", "power", "spin",
+            "serve", "volley", "backhand", "forehand"
+        ]
+        
+        if any(concept in all_responses for concept in advanced_concepts):
+            return "Intermediate"
+    
+    # DEFAULT: When in doubt, return Beginner
     return "Beginner"
+
 
 def handle_introduction_sequence(user_message: str, claude_client):
     """
-    Handle the introduction sequence for new players with invisible level assessment
+    Enhanced introduction sequence with conversational level assessment
     """
     intro_state = st.session_state.get("intro_state", "waiting_for_name")
     
@@ -910,15 +1006,67 @@ def handle_introduction_sequence(user_message: str, claude_client):
         player_name = extract_name_from_response(user_message)
         if player_name:
             st.session_state.collected_name = player_name
-            st.session_state.intro_state = "collecting_experience"
-            return f"Nice to meet you, {player_name}! I am excited, tell me about your tennis. You been playing long?"    
+            st.session_state.intro_state = "checking_if_new"
+            return f"Nice to meet you, {player_name}! Are you pretty new to tennis?"
     
-    elif intro_state == "collecting_experience":
-        st.session_state.intro_state = "ready_for_assessment"
-        return "What's your biggest challenge on court right now? What shots feel most comfortable to you?"
+    elif intro_state == "checking_if_new":
+        user_lower = user_message.lower().strip()
+        
+        # Check for clear "yes" responses to being new
+        yes_responses = ["yes", "yeah", "yep", "sure", "i am", "pretty new", "very new", "just started"]
+        if any(response in user_lower for response in yes_responses):
+            # Clear beginner - update player and finish intro
+            success = update_player_info(
+                st.session_state.player_record_id,
+                st.session_state.collected_name,
+                "Beginner"
+            )
+            st.session_state.intro_completed = True
+            st.session_state.intro_state = "complete"
+            return "Perfect! Let's get started. What would you like to work on today?"
+        
+        # Check for clear "no" responses
+        no_responses = ["no", "nope", "not really", "not new", "been playing"]
+        if any(response in user_lower for response in no_responses):
+            st.session_state.intro_state = "asking_time"
+            return "How long have you been playing tennis?"
+        
+        # Ambiguous response - probe more
+        st.session_state.intro_state = "asking_time"
+        return "Tell me a bit about your tennis experience - how long have you been playing?"
     
-    elif intro_state == "ready_for_assessment":
-        # Now we have enough conversation to assess level
+    elif intro_state == "asking_time":
+        user_lower = user_message.lower().strip()
+        
+        # Quick check for obvious beginner time indicators
+        beginner_time_phrases = [
+            "few months", "couple months", "just started", "not long",
+            "recently", "6 months", "less than a year"
+        ]
+        
+        if any(phrase in user_lower for phrase in beginner_time_phrases):
+            # Clear beginner based on time
+            success = update_player_info(
+                st.session_state.player_record_id,
+                st.session_state.collected_name,
+                "Beginner"
+            )
+            st.session_state.intro_completed = True
+            st.session_state.intro_state = "complete"
+            return "Great! What would you like to work on today?"
+        
+        # Check for 1+ year indicators
+        year_indicators = ["year", "years", "while", "long time"]
+        if any(indicator in user_lower for indicator in year_indicators):
+            st.session_state.intro_state = "asking_frequency"
+            return "Nice! How often do you play? Do you take lessons?"
+        
+        # Unclear time response - ask for frequency anyway
+        st.session_state.intro_state = "asking_frequency"  
+        return "How often do you get to play? Do you take lessons or work with a coach?"
+    
+    elif intro_state == "asking_frequency":
+        # Now we have enough for assessment
         assessed_level = assess_player_level_from_conversation(st.session_state.messages, claude_client)
         
         # Update player record with collected name and assessed level
@@ -928,13 +1076,13 @@ def handle_introduction_sequence(user_message: str, claude_client):
             assessed_level
         )
         
-        if success:
-            st.session_state.intro_completed = True
-            st.session_state.intro_state = "complete"
-            return "Great! What would you like to work on today?"
+        st.session_state.intro_completed = True
+        st.session_state.intro_state = "complete"
+        
+        # Acknowledge their level naturally
+        if assessed_level == "Intermediate":
+            return "Sounds like you've got some good experience! What's on your mind for today's session?"
         else:
-            # Fallback - continue anyway
-            st.session_state.intro_completed = True
             return "Perfect! What would you like to work on today?"
     
     return None
