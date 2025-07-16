@@ -778,7 +778,7 @@ def enhanced_generate_personalized_welcome_message(player_name: str, session_num
 
 # ENHANCED: Build conversational prompt with coaching history
 def build_conversational_prompt_with_history(user_question: str, context_chunks: list, conversation_history: list, coaching_history: list = None, player_name: str = None, player_level: str = None) -> str:
-“”“Build Claude prompt with proper player context and memory”””
+"""Build Claude prompt with proper player context and memory"""
 
 ```
 # Check if this is intro
