@@ -586,7 +586,7 @@ def process_completed_session(player_record_id: str, session_id: str, claude_cli
     except Exception as e:
         return False
 
-def cleanup_abandoned_sessions(claude_client, dry_run=True):
+def cleanup_abandoned_sessions(claude_client, dry_run=True, preview_mode=False):
     """Mark old active sessions as completed and generate summaries"""
     try:
         url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
@@ -598,7 +598,7 @@ def cleanup_abandoned_sessions(claude_client, dry_run=True):
         
         params = {
             "filterByFormula": f"AND({{session_status}} = 'active', {{timestamp}} < '{cutoff_time}')",
-            "sort[0][field]": "timestamp",
+            "sort[0][field]": "session_id",
             "sort[0][direction]": "desc"
         }
         
@@ -616,15 +616,15 @@ def cleanup_abandoned_sessions(claude_client, dry_run=True):
         for record in all_abandoned_records:
             fields = record.get('fields', {})
             session_id = fields.get('session_id')
-            message_content = fields.get('message_content', '').lower()
+            message_content = fields.get('message_content', '')
+            role = fields.get('role', '')
+            message_order = fields.get('message_order', 0)
             
             if not session_id:
                 continue
                 
-            # Skip admin sessions (contain "hilly spike" or admin-related content)
-            if any(admin_phrase in message_content for admin_phrase in [
-                'hilly spike', 'admin mode'
-            ]):
+            # Skip obvious admin sessions
+            if 'hilly spike' in message_content.lower():
                 admin_sessions_skipped += 1
                 continue
             
@@ -639,21 +639,69 @@ def cleanup_abandoned_sessions(claude_client, dry_run=True):
                 }
             
             session_groups[session_id]['message_count'] += 1
-            session_groups[session_id]['messages'].append(message_content[:50])
+            session_groups[session_id]['messages'].append({
+                'role': role,
+                'content': message_content,
+                'order': message_order
+            })
         
-        # Filter out sessions that are just intro messages (less than 3 messages)
+        # Sort messages within each session
+        for session_data in session_groups.values():
+            session_data['messages'].sort(key=lambda x: x['order'])
+        
+        # Filter out sessions that are likely admin (less than 4 messages)
         legitimate_sessions = []
         for session_id, session_data in session_groups.items():
-            if session_data['message_count'] >= 3:  # Only real coaching sessions
+            if session_data['message_count'] >= 4:  # Raised threshold
                 legitimate_sessions.append(session_data)
             else:
                 admin_sessions_skipped += 1
         
+        if preview_mode:
+            st.write(f"**Preview Mode: {len(legitimate_sessions)} sessions to review**")
+            st.write(f"Skipped {admin_sessions_skipped} admin/short sessions")
+            
+            # Show detailed preview of each session
+            for i, session_data in enumerate(legitimate_sessions):
+                session_id = session_data['session_id']
+                message_count = session_data['message_count']
+                timestamp = session_data['first_timestamp']
+                
+                with st.expander(f"📋 Session {session_id} - {message_count} messages - {timestamp}"):
+                    st.write("**Conversation Preview:**")
+                    
+                    # Show first few messages to determine if it's legitimate
+                    for j, msg in enumerate(session_data['messages'][:6]):  # Show first 6 messages
+                        role_label = "🧑‍🎓 Player" if msg['role'] == 'player' else "🎾 Coach"
+                        content = msg['content'][:100] + "..." if len(msg['content']) > 100 else msg['content']
+                        st.write(f"**{role_label}:** {content}")
+                        
+                        if j == 5 and len(session_data['messages']) > 6:
+                            st.write(f"... and {len(session_data['messages']) - 6} more messages")
+                    
+                    # Add cleanup button for this specific session
+                    if st.button(f"🧹 Clean Up Session {session_id}", key=f"cleanup_{session_id}"):
+                        with st.spinner(f"Cleaning up session {session_id}..."):
+                            if session_data['player_ids']:
+                                player_id = session_data['player_ids'][0]
+                                session_marked = mark_session_completed(player_id, str(session_id))
+                                
+                                if session_marked:
+                                    summary_created = process_completed_session(player_id, str(session_id), claude_client)
+                                    if summary_created:
+                                        st.success(f"✅ Successfully cleaned up session {session_id}")
+                                    else:
+                                        st.warning(f"⚠️ Session {session_id} marked complete but summary failed")
+                                else:
+                                    st.error(f"❌ Failed to mark session {session_id} as complete")
+            
+            return True
+        
         if dry_run:
             st.write(f"DRY RUN: Would clean up {len(legitimate_sessions)} legitimate abandoned sessions")
-            st.write(f"Skipped {admin_sessions_skipped} admin/intro sessions")
+            st.write(f"Skipped {admin_sessions_skipped} admin/short sessions")
             
-            # Show details of what would be cleaned up
+            # Show summary of what would be cleaned up
             for session_data in legitimate_sessions:
                 session_id = session_data['session_id']
                 message_count = session_data['message_count']
@@ -686,7 +734,7 @@ def cleanup_abandoned_sessions(claude_client, dry_run=True):
                     st.write(f"❌ Failed to mark session {session_id} as complete")
         
         st.write(f"Successfully cleaned up {cleanup_count} legitimate abandoned sessions")
-        st.write(f"Skipped {admin_sessions_skipped} admin/intro sessions")
+        st.write(f"Skipped {admin_sessions_skipped} admin/short sessions")
         return True
         
     except Exception as e:
