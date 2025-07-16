@@ -841,9 +841,9 @@ Keep responses SHORT (1-2 sentences max). Be enthusiastic but concise.”””
 
 Tennis Knowledge: {context_text}
 
-Player says: “{user_question}”
+Player says: "{user_question}"
 
-Respond naturally as Coach Taai:”””
+Respond naturally as Coach Taai:"""
 
 ```
 else:
