@@ -1390,7 +1390,7 @@ def handle_introduction_sequence(user_message: str, claude_client):
     """
     intro_state = st.session_state.get("intro_state", "waiting_for_name")
 
-```
+
 if intro_state == "waiting_for_name":
     # Extract name from user response
     player_name = extract_name_from_response(user_message)
@@ -1476,7 +1476,7 @@ elif intro_state == "asking_frequency":
         return "Perfect! What would you like to work on together today?"
 
 return None
-```
+
 
 def get_current_player_info(player_record_id: str) -> tuple:
     """Retrieve current player name and level from database"""
