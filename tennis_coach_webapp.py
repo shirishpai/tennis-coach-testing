@@ -2075,7 +2075,7 @@ def display_admin_interface(index, claude_client):
                                 st.markdown(f"""
                                 <div style="display: flex; justify-content: flex-start; margin: 10px 0;">
                                     <div style="background-color: #E3F2FD; padding: 10px 15px; border-radius: 18px; max-width: 70%; border: 1px solid #BBDEFB;">
-                                        <strong>🧑‍🎓 Player:</strong><br>
+                                        <strong> Player:</strong><br>
                                         {content}
                                     </div>
                                 </div>
