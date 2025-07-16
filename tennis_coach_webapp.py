@@ -741,6 +741,204 @@ def cleanup_abandoned_sessions(claude_client, dry_run=True, preview_mode=False):
         st.error(f"Cleanup error: {e}")
         return False
 
+def analyze_session_fallback_details(session_id):
+    """Get detailed fallback analysis for a specific session"""
+    try:
+        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
+        headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
+        
+        params = {
+            "filterByFormula": f"{{session_id}} = {session_id}",
+            "sort[0][field]": "message_order",
+            "sort[0][direction]": "asc"
+        }
+        
+        response = requests.get(url, headers=headers, params=params)
+        if response.status_code == 200:
+            records = response.json().get('records', [])
+            
+            fallback_analysis = []
+            for record in records:
+                fields = record.get('fields', {})
+                if fields.get('role') == 'coach':
+                    message_content = fields.get('message_content', '')
+                    resources_used = fields.get('coaching_resources_used', 0)
+                    resource_details = fields.get('resource_details', '')
+                    message_order = fields.get('message_order', 0)
+                    
+                    # Determine mode used
+                    if resources_used > 0:
+                        # Extract relevance from resource details
+                        relevance_scores = []
+                        if resource_details:
+                            import re
+                            scores = re.findall(r'(\d+\.\d+)\s+relevance', resource_details)
+                            relevance_scores = [float(score) for score in scores]
+                        
+                        max_relevance = max(relevance_scores) if relevance_scores else 0.0
+                        mode_used = "✅ Pinecone"
+                        mode_details = f"(relevance: {max_relevance:.2f})"
+                    else:
+                        mode_used = "⚠️ Fallback"
+                        mode_details = "(Claude-only)"
+                    
+                    fallback_analysis.append({
+                        'message_order': message_order,
+                        'message_preview': message_content[:60] + "..." if len(message_content) > 60 else message_content,
+                        'mode_used': mode_used,
+                        'mode_details': mode_details,
+                        'resources_used': resources_used,
+                        'resource_details': resource_details,
+                        'relevance_scores': relevance_scores if 'relevance_scores' in locals() else []
+                    })
+            
+            return fallback_analysis
+        return []
+        
+    except Exception as e:
+        st.error(f"Error analyzing session: {e}")
+        return []
+
+def detect_content_gaps():
+    """Analyze fallback patterns to identify content gaps"""
+    try:
+        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
+        headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
+        
+        # Get recent sessions (last 100 coach responses)
+        params = {
+            "filterByFormula": "{{role}} = 'coach'",
+            "sort[0][field]": "timestamp",
+            "sort[0][direction]": "desc",
+            "maxRecords": 100
+        }
+        
+        response = requests.get(url, headers=headers, params=params)
+        if response.status_code == 200:
+            records = response.json().get('records', [])
+            
+            # Analyze fallback patterns
+            fallback_topics = []
+            high_relevance_topics = []
+            total_responses = 0
+            fallback_count = 0
+            
+            for record in records:
+                fields = record.get('fields', {})
+                resources_used = fields.get('coaching_resources_used', 0)
+                resource_details = fields.get('resource_details', '')
+                
+                # Get corresponding user message to analyze topic
+                session_id = fields.get('session_id')
+                message_order = fields.get('message_order', 0)
+                
+                # Find the user message that triggered this response
+                user_message = get_user_message_for_response(session_id, message_order - 1)
+                
+                total_responses += 1
+                
+                if resources_used == 0:
+                    # This was a fallback
+                    fallback_count += 1
+                    if user_message:
+                        topic_keywords = extract_topic_keywords(user_message)
+                        fallback_topics.append({
+                            'user_query': user_message[:50] + "..." if len(user_message) > 50 else user_message,
+                            'keywords': topic_keywords,
+                            'session_id': session_id
+                        })
+                else:
+                    # This used Pinecone successfully
+                    if user_message:
+                        import re
+                        scores = re.findall(r'(\d+\.\d+)\s+relevance', resource_details)
+                        if scores:
+                            max_relevance = max(float(score) for score in scores)
+                            if max_relevance >= 0.8:  # High relevance
+                                topic_keywords = extract_topic_keywords(user_message)
+                                high_relevance_topics.append({
+                                    'user_query': user_message[:50] + "..." if len(user_message) > 50 else user_message,
+                                    'keywords': topic_keywords,
+                                    'relevance': max_relevance,
+                                    'session_id': session_id
+                                })
+            
+            # Calculate fallback rate
+            fallback_rate = (fallback_count / total_responses * 100) if total_responses > 0 else 0
+            
+            # Analyze topic patterns
+            fallback_keywords = {}
+            for topic in fallback_topics:
+                for keyword in topic['keywords']:
+                    fallback_keywords[keyword] = fallback_keywords.get(keyword, 0) + 1
+            
+            high_relevance_keywords = {}
+            for topic in high_relevance_topics:
+                for keyword in topic['keywords']:
+                    high_relevance_keywords[keyword] = high_relevance_keywords.get(keyword, 0) + 1
+            
+            return {
+                'fallback_rate': fallback_rate,
+                'total_responses': total_responses,
+                'fallback_count': fallback_count,
+                'common_fallback_topics': sorted(fallback_keywords.items(), key=lambda x: x[1], reverse=True)[:10],
+                'high_performing_topics': sorted(high_relevance_keywords.items(), key=lambda x: x[1], reverse=True)[:10],
+                'recent_fallbacks': fallback_topics[:5],
+                'recent_successes': high_relevance_topics[:5]
+            }
+            
+        return None
+        
+    except Exception as e:
+        st.error(f"Error detecting content gaps: {e}")
+        return None
+
+def get_user_message_for_response(session_id, expected_order):
+    """Get the user message that triggered a specific coach response"""
+    try:
+        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
+        headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
+        
+        params = {
+            "filterByFormula": f"AND({{session_id}} = {session_id}, {{message_order}} = {expected_order}, {{role}} = 'player')",
+            "maxRecords": 1
+        }
+        
+        response = requests.get(url, headers=headers, params=params)
+        if response.status_code == 200:
+            records = response.json().get('records', [])
+            if records:
+                return records[0].get('fields', {}).get('message_content', '')
+        return None
+        
+    except Exception as e:
+        return None
+
+def extract_topic_keywords(message):
+    """Extract tennis-related keywords from a message"""
+    tennis_keywords = [
+        'forehand', 'backhand', 'serve', 'volley', 'smash', 'drop shot',
+        'slice', 'topspin', 'backspin', 'grip', 'stance', 'footwork',
+        'court', 'net', 'baseline', 'rally', 'match', 'game', 'set',
+        'technique', 'practice', 'drill', 'training', 'coach', 'lesson',
+        'mental', 'strategy', 'tactics', 'consistency', 'power', 'spin',
+        'movement', 'positioning', 'timing', 'rhythm', 'balance'
+    ]
+    
+    message_lower = message.lower()
+    found_keywords = []
+    
+    for keyword in tennis_keywords:
+        if keyword in message_lower:
+            found_keywords.append(keyword)
+    
+    # If no tennis keywords found, extract first few words as general topic
+    if not found_keywords:
+        words = message_lower.split()[:3]
+        found_keywords = [word for word in words if len(word) > 2]
+    
+    return found_keywords[:5]  # Return max 5 keywords
+
 def mark_session_reviewed(session_id: str, admin_identifier: str = "admin") -> bool:
     """Mark a session as reviewed by admin"""
     try:
