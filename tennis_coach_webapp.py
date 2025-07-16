@@ -1398,96 +1398,98 @@ def assess_player_level_from_conversation(conversation_history: list, claude_cli
 
 
 def handle_introduction_sequence(user_message: str, claude_client):
-    """
-    Enhanced introduction sequence with smooth conversational flow
-    """
-    intro_state = st.session_state.get("intro_state", "waiting_for_name")
+“””
+Enhanced introduction sequence with smooth conversational flow and Taai personality
+“””
+intro_state = st.session_state.get(“intro_state”, “waiting_for_name”)
+
+```
+if intro_state == "waiting_for_name":
+    # Extract name from user response
+    player_name = extract_name_from_response(user_message)
+    if player_name:
+        st.session_state.collected_name = player_name
+        st.session_state.intro_state = "checking_if_new"
+        return f"Nice to meet you, {player_name}! I'm excited to coach you. Tell me, are you pretty new to tennis?"
+
+elif intro_state == "checking_if_new":
+    user_lower = user_message.lower().strip()
     
-    if intro_state == "waiting_for_name":
-        # Extract name from user response
-        player_name = extract_name_from_response(user_message)
-        if player_name:
-            st.session_state.collected_name = player_name
-            st.session_state.intro_state = "checking_if_new"
-            return f"Nice to meet you, {player_name}! Are you pretty new to tennis?"
-    
-    elif intro_state == "checking_if_new":
-        user_lower = user_message.lower().strip()
-        
-        # Check for clear "yes" responses to being new
-        yes_responses = ["yes", "yeah", "yep", "sure", "i am", "pretty new", "very new", "just started"]
-        if any(response in user_lower for response in yes_responses):
-            # Clear beginner - update player and finish intro
-            success = update_player_info(
-                st.session_state.player_record_id,
-                st.session_state.collected_name,
-                "Beginner"
-            )
-            st.session_state.intro_completed = True
-            st.session_state.intro_state = "complete"
-            return "Perfect! Let's get started. What would you like to work on today?"
-        
-        # Check for responses that indicate experience - skip time question and go to frequency
-        experience_indicators = [
-            "no", "nope", "not really", "not new", "been playing", 
-            "playing for", "year", "years", "months", "while now",
-            "some time", "a bit", "experienced"
-        ]
-        
-        if any(indicator in user_lower for indicator in experience_indicators):
-            # They have experience - skip time question, go straight to frequency
-            st.session_state.intro_state = "asking_frequency"
-            return "Great! How often do you play? Do you take lessons?"
-        
-        # Ambiguous response - ask for more details
-        st.session_state.intro_state = "asking_time"
-        return "Tell me a bit about your tennis experience - how long have you been playing?"
-    
-    elif intro_state == "asking_time":
-        user_lower = user_message.lower().strip()
-        
-        # Quick check for obvious beginner time indicators
-        beginner_time_phrases = [
-            "few months", "couple months", "just started", "not long",
-            "recently", "6 months", "less than a year", "under a year"
-        ]
-        
-        if any(phrase in user_lower for phrase in beginner_time_phrases):
-            # Clear beginner based on time
-            success = update_player_info(
-                st.session_state.player_record_id,
-                st.session_state.collected_name,
-                "Beginner"
-            )
-            st.session_state.intro_completed = True
-            st.session_state.intro_state = "complete"
-            return "Great! What would you like to work on today?"
-        
-        # Any other response goes to frequency question
-        st.session_state.intro_state = "asking_frequency"  
-        return "Nice! How often do you get to play? Do you take lessons?"
-    
-    elif intro_state == "asking_frequency":
-        # Now we have enough for assessment
-        assessed_level = assess_player_level_from_conversation(st.session_state.messages, claude_client)
-        
-        # Update player record with collected name and assessed level
+    # Check for clear "yes" responses to being new
+    yes_responses = ["yes", "yeah", "yep", "sure", "i am", "pretty new", "very new", "just started"]
+    if any(response in user_lower for response in yes_responses):
+        # Clear beginner - update player and finish intro
         success = update_player_info(
             st.session_state.player_record_id,
             st.session_state.collected_name,
-            assessed_level
+            "Beginner"
         )
-        
         st.session_state.intro_completed = True
         st.session_state.intro_state = "complete"
-        
-        # Acknowledge their level naturally
-        if assessed_level == "Intermediate":
-            return "Sounds like you've got some good experience! What's on your mind for today's session?"
-        else:
-            return "Perfect! What would you like to work on today?"
+        return "That's wonderful - everyone starts somewhere! What's got you most curious about tennis right now?"
     
-    return None
+    # Check for responses that indicate experience - skip time question and go to frequency
+    experience_indicators = [
+        "no", "nope", "not really", "not new", "been playing", 
+        "playing for", "year", "years", "months", "while now",
+        "some time", "a bit", "experienced"
+    ]
+    
+    if any(indicator in user_lower for indicator in experience_indicators):
+        # They have experience - skip time question, go straight to frequency
+        st.session_state.intro_state = "asking_frequency"
+        return "I hear you saying you have some experience - that's great! How often do you get to play these days?"
+    
+    # Ambiguous response - ask for more details
+    st.session_state.intro_state = "asking_time"
+    return "Tell me a bit more about your tennis journey - I'd love to understand where you're coming from."
+
+elif intro_state == "asking_time":
+    user_lower = user_message.lower().strip()
+    
+    # Quick check for obvious beginner time indicators
+    beginner_time_phrases = [
+        "few months", "couple months", "just started", "not long",
+        "recently", "6 months", "less than a year", "under a year"
+    ]
+    
+    if any(phrase in user_lower for phrase in beginner_time_phrases):
+        # Clear beginner based on time
+        success = update_player_info(
+            st.session_state.player_record_id,
+            st.session_state.collected_name,
+            "Beginner"
+        )
+        st.session_state.intro_completed = True
+        st.session_state.intro_state = "complete"
+        return "That sounds like a perfect time to really focus on fundamentals! What's challenging you most on court?"
+    
+    # Any other response goes to frequency question
+    st.session_state.intro_state = "asking_frequency"  
+    return "Nice! How often do you get to play? I'm curious about your routine."
+
+elif intro_state == "asking_frequency":
+    # Now we have enough for assessment
+    assessed_level = assess_player_level_from_conversation(st.session_state.messages, claude_client)
+    
+    # Update player record with collected name and assessed level
+    success = update_player_info(
+        st.session_state.player_record_id,
+        st.session_state.collected_name,
+        assessed_level
+    )
+    
+    st.session_state.intro_completed = True
+    st.session_state.intro_state = "complete"
+    
+    # Acknowledge their level naturally with Taai personality
+    if assessed_level == "Intermediate":
+        return "I can tell you've put in some good work! What's on your mind for today's session?"
+    else:
+        return "Perfect! What would you like to work on together today?"
+
+return None
+```
 
 def get_current_player_info(player_record_id: str) -> tuple:
     """Retrieve current player name and level from database"""
@@ -2227,379 +2229,386 @@ def display_admin_interface(index, claude_client):
         st.rerun()
 
 def main():
-    st.set_page_config(
-        page_title="Tennis Coach AI",
-        page_icon="🎾",
-        layout="centered",
-        initial_sidebar_state="collapsed"
-    )
+st.set_page_config(
+page_title=“Tennis Coach AI”,
+page_icon=“🎾”,
+layout=“centered”,
+initial_sidebar_state=“collapsed”
+)
+
+```
+st.title("🎾 Tennis Coach AI")
+st.markdown("*Your personal tennis coaching assistant*")
+st.markdown("---")
+
+with st.spinner("Connecting to tennis coaching database..."):
+    index, claude_client = setup_connections()
+
+if not index or not claude_client:
+    st.error("Failed to connect to coaching systems. Please check API keys.")
+    st.stop()
+
+# CHECK FOR ADMIN MODE AFTER CONNECTIONS ARE ESTABLISHED
+if st.session_state.get('admin_mode', False):
+    display_admin_interface(index, claude_client)
+    return
+
+with st.sidebar:
+    st.header("🔧 Admin Controls")
+    top_k = st.slider("Coaching resources", 1, 8, 3, key="coaching_resources_slider")
     
-    st.title("🎾 Tennis Coach AI")
-    st.markdown("*Your personal tennis coaching assistant*")
-    st.markdown("---")
-    
-    with st.spinner("Connecting to tennis coaching database..."):
-        index, claude_client = setup_connections()
-    
-    if not index or not claude_client:
-        st.error("Failed to connect to coaching systems. Please check API keys.")
-        st.stop()
-    
-    # CHECK FOR ADMIN MODE AFTER CONNECTIONS ARE ESTABLISHED
-    if st.session_state.get('admin_mode', False):
-        display_admin_interface(index, claude_client)
-        return
-    
-    with st.sidebar:
-        st.header("🔧 Admin Controls")
-        top_k = st.slider("Coaching resources", 1, 8, 3, key="coaching_resources_slider")
+    if st.button("🔄 New Session"):
+        st.session_state.messages = []
+        st.session_state.conversation_log = []
+        st.session_state.player_setup_complete = False
+        st.session_state.welcome_followup = None
+        st.session_state.recent_greetings = []
+        st.rerun()
+
+# PLAYER SETUP FORM
+if not st.session_state.get("player_setup_complete"):
+    with st.form("player_setup"):
+        st.markdown("### 🎾 Welcome to Tennis Coach AI")
+        st.markdown("**Quick setup:**")
         
-        if st.button("🔄 New Session"):
-            st.session_state.messages = []
-            st.session_state.conversation_log = []
-            st.session_state.player_setup_complete = False
-            st.session_state.welcome_followup = None
-            st.session_state.recent_greetings = []
-            st.rerun()
-    
-    # PLAYER SETUP FORM
-    if not st.session_state.get("player_setup_complete"):
-        with st.form("player_setup"):
-            st.markdown("### 🎾 Welcome to Tennis Coach AI")
-            st.markdown("**Quick setup:**")
-            
-            player_email = st.text_input(
-                "Email address", 
-                placeholder="your.email@example.com",
-                help="Required for session continuity and progress tracking"
-            )
-            
-            if st.form_submit_button("Start Coaching Session", type="primary"):
-                if not player_email:
-                    st.error("Please enter your email address.")
-                elif not is_valid_email(player_email):
-                    st.error("⚠️ Please enter a valid email address (example: yourname@domain.com)")
-                else:
-                    with st.spinner("Setting up your coaching session..."):
-                        welcome_msg = setup_player_session_with_continuity(player_email)
-                        if not welcome_msg:
-                            return
+        player_email = st.text_input(
+            "Email address", 
+            placeholder="your.email@example.com",
+            help="Required for session continuity and progress tracking"
+        )
+        
+        if st.form_submit_button("Start Coaching Session", type="primary"):
+            if not player_email:
+                st.error("Please enter your email address.")
+            elif not is_valid_email(player_email):
+                st.error("⚠️ Please enter a valid email address (example: yourname@domain.com)")
+            else:
+                with st.spinner("Setting up your coaching session..."):
+                    welcome_msg = setup_player_session_with_continuity(player_email)
+                    if not welcome_msg:
+                        return
+                    
+                    st.session_state.player_email = player_email
+                    st.session_state.player_setup_complete = True
+                    
+                    session_id = str(uuid.uuid4())[:8]
+                    st.session_state.session_id = session_id
+                    st.session_state.messages = []
+                    st.session_state.message_counter = 0
+                    
+                    # Add the greeting message
+                    st.session_state.messages = [{"role": "assistant", "content": welcome_msg}]
+                    
+                    # Add the followup message immediately if it exists
+                    followup_msg = st.session_state.get('welcome_followup')
+                    if followup_msg:
+                        st.session_state.messages.append({"role": "assistant", "content": followup_msg})
+                    
+                    # Log both messages
+                    if st.session_state.get("player_record_id"):
+                        # Log greeting message
+                        st.session_state.message_counter += 1
+                        log_message_to_sss(
+                            st.session_state.player_record_id,
+                            session_id,
+                            st.session_state.message_counter,
+                            "assistant",
+                            welcome_msg
+                        )
+                        log_message_to_conversation_log(
+                            st.session_state.player_record_id,
+                            session_id,
+                            st.session_state.message_counter,
+                            "assistant",
+                            welcome_msg
+                        )
                         
-                        st.session_state.player_email = player_email
-                        st.session_state.player_setup_complete = True
-                        
-                        session_id = str(uuid.uuid4())[:8]
-                        st.session_state.session_id = session_id
-                        st.session_state.messages = []
-                        st.session_state.message_counter = 0
-                        
-                        # Add the greeting message
-                        st.session_state.messages = [{"role": "assistant", "content": welcome_msg}]
-                        
-                        # Add the followup message immediately if it exists
-                        followup_msg = st.session_state.get('welcome_followup')
+                        # Log followup message if exists
                         if followup_msg:
-                            st.session_state.messages.append({"role": "assistant", "content": followup_msg})
-                        
-                        # Log both messages
-                        if st.session_state.get("player_record_id"):
-                            # Log greeting message
                             st.session_state.message_counter += 1
                             log_message_to_sss(
                                 st.session_state.player_record_id,
                                 session_id,
                                 st.session_state.message_counter,
                                 "assistant",
-                                welcome_msg
+                                followup_msg
                             )
                             log_message_to_conversation_log(
                                 st.session_state.player_record_id,
                                 session_id,
                                 st.session_state.message_counter,
                                 "assistant",
-                                welcome_msg
+                                followup_msg
                             )
-                            
-                            # Log followup message if exists
-                            if followup_msg:
-                                st.session_state.message_counter += 1
-                                log_message_to_sss(
-                                    st.session_state.player_record_id,
-                                    session_id,
-                                    st.session_state.message_counter,
-                                    "assistant",
-                                    followup_msg
-                                )
-                                log_message_to_conversation_log(
-                                    st.session_state.player_record_id,
-                                    session_id,
-                                    st.session_state.message_counter,
-                                    "assistant",
-                                    followup_msg
-                                )
-                        
-                        st.success("Welcome! Ready to start your coaching session.")
-                        st.rerun()
+                    
+                    st.success("Welcome! Ready to start your coaching session.")
+                    st.rerun()
+    return
+
+# DISPLAY CONVERSATION MESSAGES
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+# USER INPUT HANDLING
+if prompt := st.chat_input("Ask your tennis coach..."):
+    # ADMIN MODE TRIGGER
+    if prompt.strip().lower() == "hilly spike":
+        st.session_state.admin_mode = True
+        st.rerun()
         return
     
-    # DISPLAY CONVERSATION MESSAGES
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+    # Smart session end detection
+    end_result = detect_session_end(prompt, st.session_state.messages)
     
-    # USER INPUT HANDLING
-    if prompt := st.chat_input("Ask your tennis coach..."):
-        # ADMIN MODE TRIGGER
-        if prompt.strip().lower() == "hilly spike":
-            st.session_state.admin_mode = True
-            st.rerun()
-            return
-        
-        # Smart session end detection
-        end_result = detect_session_end(prompt, st.session_state.messages)
-        
-        if end_result['should_end']:
-            if end_result['needs_confirmation']:
-                # Set confirmation state instead of ending immediately
-                st.session_state.pending_session_end = True
-                st.session_state.end_confidence = end_result['confidence']
-            else:
-                # High confidence - end immediately
-                st.session_state.session_ending = True
-        
-        # Handle confirmation responses
-        if st.session_state.get("pending_session_end") and prompt.lower().strip() in ["yes", "y", "yeah", "yep", "sure"]:
+    if end_result['should_end']:
+        if end_result['needs_confirmation']:
+            # Set confirmation state instead of ending immediately
+            st.session_state.pending_session_end = True
+            st.session_state.end_confidence = end_result['confidence']
+        else:
+            # High confidence - end immediately
             st.session_state.session_ending = True
-            st.session_state.pending_session_end = False
-        elif st.session_state.get("pending_session_end") and prompt.lower().strip() in ["no", "n", "nope", "not yet", "continue"]:
-            st.session_state.pending_session_end = False
-        
-        st.session_state.message_counter += 1
-        
-        # DUAL LOGGING: Log user message to both tables
-        if st.session_state.get("player_record_id"):
-            log_message_to_sss(
-                st.session_state.player_record_id,
-                st.session_state.session_id,
-                st.session_state.message_counter,
-                "user",
-                prompt
-            )
-            log_message_to_conversation_log(
-                st.session_state.player_record_id,
-                st.session_state.session_id,
-                st.session_state.message_counter,
-                "user",
-                prompt
-            )
-        
-        with st.chat_message("user"):
-            st.markdown(prompt)
-        
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        
-        # NEW: Handle introduction sequence for new players
-        if not st.session_state.get("intro_completed", True):  # True for returning players
-            intro_response = handle_introduction_sequence(prompt, claude_client)
-            if intro_response:
-                with st.chat_message("assistant"):
-                    st.markdown(intro_response)
-                
-                st.session_state.message_counter += 1
-                st.session_state.messages.append({
-                    "role": "assistant", 
-                    "content": intro_response
-                })
-                
-                # DUAL LOGGING: Log intro response to both tables
-                if st.session_state.get("player_record_id"):
-                    log_message_to_sss(
-                        st.session_state.player_record_id,
-                        st.session_state.session_id,
-                        st.session_state.message_counter,
-                        "assistant",
-                        intro_response
-                    )
-                    log_message_to_conversation_log(
-                        st.session_state.player_record_id,
-                        st.session_state.session_id,
-                        st.session_state.message_counter,
-                        "assistant",
-                        intro_response
-                    )
-                return  # Don't process as normal coaching message yet
-        
-        # Handle session end confirmation
-        if st.session_state.get("pending_session_end"):
-            confidence = st.session_state.get("end_confidence", "medium")
-            confirmation_msg = generate_session_end_confirmation(prompt, confidence)
-            
+    
+    # Handle confirmation responses
+    if st.session_state.get("pending_session_end") and prompt.lower().strip() in ["yes", "y", "yeah", "yep", "sure"]:
+        st.session_state.session_ending = True
+        st.session_state.pending_session_end = False
+    elif st.session_state.get("pending_session_end") and prompt.lower().strip() in ["no", "n", "nope", "not yet", "continue"]:
+        st.session_state.pending_session_end = False
+    
+    st.session_state.message_counter += 1
+    
+    # DUAL LOGGING: Log user message to both tables
+    if st.session_state.get("player_record_id"):
+        log_message_to_sss(
+            st.session_state.player_record_id,
+            st.session_state.session_id,
+            st.session_state.message_counter,
+            "user",
+            prompt
+        )
+        log_message_to_conversation_log(
+            st.session_state.player_record_id,
+            st.session_state.session_id,
+            st.session_state.message_counter,
+            "user",
+            prompt
+        )
+    
+    with st.chat_message("user"):
+        st.markdown(prompt)
+    
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    
+    # NEW: Handle introduction sequence for new players
+    if not st.session_state.get("intro_completed", True):  # True for returning players
+        intro_response = handle_introduction_sequence(prompt, claude_client)
+        if intro_response:
             with st.chat_message("assistant"):
-                st.markdown(confirmation_msg)
+                st.markdown(intro_response)
             
             st.session_state.message_counter += 1
             st.session_state.messages.append({
                 "role": "assistant", 
-                "content": confirmation_msg
+                "content": intro_response
             })
             
-            # DUAL LOGGING: Log confirmation message to both tables
+            # DUAL LOGGING: Log intro response to both tables
             if st.session_state.get("player_record_id"):
                 log_message_to_sss(
                     st.session_state.player_record_id,
                     st.session_state.session_id,
                     st.session_state.message_counter,
                     "assistant",
-                    confirmation_msg
+                    intro_response
                 )
                 log_message_to_conversation_log(
                     st.session_state.player_record_id,
                     st.session_state.session_id,
                     st.session_state.message_counter,
                     "assistant",
-                    confirmation_msg
+                    intro_response
                 )
-            return
+            return  # Don't process as normal coaching message yet
+    
+    # Handle session end confirmation
+    if st.session_state.get("pending_session_end"):
+        confidence = st.session_state.get("end_confidence", "medium")
+        confirmation_msg = generate_session_end_confirmation(prompt, confidence)
         
-        # If session is ending, provide closing response and mark as completed
-        if st.session_state.get("session_ending"):
-            with st.chat_message("assistant"):
-                # Get player name for personalized ending message
-                player_name, _ = get_current_player_info(st.session_state.get("player_record_id", ""))
-                closing_response = generate_dynamic_session_ending(st.session_state.messages, player_name)
-                st.markdown(closing_response)
-                
-                # Log closing response
-                st.session_state.message_counter += 1
-                st.session_state.messages.append({
-                    "role": "assistant", 
-                    "content": closing_response
-                })
-                
-                # DUAL LOGGING: Log closing response to both tables
-                if st.session_state.get("player_record_id"):
-                    log_message_to_sss(
-                        st.session_state.player_record_id,
-                        st.session_state.session_id,
-                        st.session_state.message_counter,
-                        "assistant",
-                        closing_response
-                    )
-                    log_message_to_conversation_log(
-                        st.session_state.player_record_id,
-                        st.session_state.session_id,
-                        st.session_state.message_counter,
-                        "assistant",
-                        closing_response
-                    )
-                
-                # Mark session as completed
-                if st.session_state.get("player_record_id"):
-                    session_marked = mark_session_completed(
-                        st.session_state.player_record_id,
-                        st.session_state.session_id
-                    )
-                    if session_marked:
-                        st.success("✅ Session marked as completed!")
-                        
-                        # Generate session summary
-                        with st.spinner("🧠 Generating session summary..."):
-                            summary_created = process_completed_session(
-                                st.session_state.player_record_id,
-                                st.session_state.session_id,
-                                claude_client
-                            )
-                            if summary_created:
-                                st.success("📝 Session summary generated and saved!")
-                            else:
-                                st.warning("⚠️ Session completed but summary generation had issues.")                
-                # Show session end message
-                st.success("🎾 **Session Complete!** Thanks for training with Coach TA today.")
-                if st.button("🔄 Start New Session", type="primary"):
-                    for key in list(st.session_state.keys()):
-                        if key not in ['player_email', 'player_record_id']:
-                            del st.session_state[key]
-                    st.rerun()
-                return
-        
-        # CLAUDE-ONLY COACHING MODE (NO PINECONE)
         with st.chat_message("assistant"):
-            with st.spinner("Coach is thinking..."):
-                coaching_history = st.session_state.get('coaching_history', [])
-                
-                # Get current player info from database
-                player_name, player_level = get_current_player_info(st.session_state.get("player_record_id", ""))
-                
-                # Build conversation context
-                recent_conversation = ""
-                if len(st.session_state.messages) > 1:
-                    recent_conversation = "\nRecent conversation:\n"
-                    for msg in st.session_state.messages[-6:]:  # Last 6 messages
-                        role = "Player" if msg['role'] == 'user' else "Coach TA"
-                        recent_conversation += f"{role}: {msg['content']}\n"
-                
-                # Add previous session context if available
-                session_context = ""
-                if coaching_history and len(coaching_history) > 0:
-                    last_session = coaching_history[0]
-                    if last_session.get('technical_focus'):
-                        session_context = f"\nPrevious session focus: {last_session['technical_focus']}"
-                
-                # Claude-only prompt (no Pinecone chunks)
-                claude_only_prompt = f"""You are Coach TA, a professional tennis coach providing remote coaching advice through chat.
+            st.markdown(confirmation_msg)
+        
+        st.session_state.message_counter += 1
+        st.session_state.messages.append({
+            "role": "assistant", 
+            "content": confirmation_msg
+        })
+        
+        # DUAL LOGGING: Log confirmation message to both tables
+        if st.session_state.get("player_record_id"):
+            log_message_to_sss(
+                st.session_state.player_record_id,
+                st.session_state.session_id,
+                st.session_state.message_counter,
+                "assistant",
+                confirmation_msg
+            )
+            log_message_to_conversation_log(
+                st.session_state.player_record_id,
+                st.session_state.session_id,
+                st.session_state.message_counter,
+                "assistant",
+                confirmation_msg
+            )
+        return
+    
+    # If session is ending, provide closing response and mark as completed
+    if st.session_state.get("session_ending"):
+        with st.chat_message("assistant"):
+            # Get player name for personalized ending message
+            player_name, _ = get_current_player_info(st.session_state.get("player_record_id", ""))
+            closing_response = generate_dynamic_session_ending(st.session_state.messages, player_name)
+            st.markdown(closing_response)
+            
+            # Log closing response
+            st.session_state.message_counter += 1
+            st.session_state.messages.append({
+                "role": "assistant", 
+                "content": closing_response
+            })
+            
+            # DUAL LOGGING: Log closing response to both tables
+            if st.session_state.get("player_record_id"):
+                log_message_to_sss(
+                    st.session_state.player_record_id,
+                    st.session_state.session_id,
+                    st.session_state.message_counter,
+                    "assistant",
+                    closing_response
+                )
+                log_message_to_conversation_log(
+                    st.session_state.player_record_id,
+                    st.session_state.session_id,
+                    st.session_state.message_counter,
+                    "assistant",
+                    closing_response
+                )
+            
+            # Mark session as completed
+            if st.session_state.get("player_record_id"):
+                session_marked = mark_session_completed(
+                    st.session_state.player_record_id,
+                    st.session_state.session_id
+                )
+                if session_marked:
+                    st.success("✅ Session marked as completed!")
+                    
+                    # Generate session summary
+                    with st.spinner("🧠 Generating session summary..."):
+                        summary_created = process_completed_session(
+                            st.session_state.player_record_id,
+                            st.session_state.session_id,
+                            claude_client
+                        )
+                        if summary_created:
+                            st.success("📝 Session summary generated and saved!")
+                        else:
+                            st.warning("⚠️ Session completed but summary generation had issues.")                
+            # Show session end message
+            st.success("🎾 **Session Complete!** Thanks for training with Coach Taai today.")
+            if st.button("🔄 Start New Session", type="primary"):
+                for key in list(st.session_state.keys()):
+                    if key not in ['player_email', 'player_record_id']:
+                        del st.session_state[key]
+                st.rerun()
+            return
+    
+    # CLAUDE-ONLY COACHING MODE (NO PINECONE)
+    with st.chat_message("assistant"):
+        with st.spinner("Coach is thinking..."):
+            coaching_history = st.session_state.get('coaching_history', [])
+            
+            # Get current player info from database
+            player_name, player_level = get_current_player_info(st.session_state.get("player_record_id", ""))
+            
+            # Build conversation context
+            recent_conversation = ""
+            if len(st.session_state.messages) > 1:
+                recent_conversation = "\nRecent conversation:\n"
+                for msg in st.session_state.messages[-6:]:  # Last 6 messages
+                    role = "Player" if msg['role'] == 'user' else "Coach Taai"
+                    recent_conversation += f"{role}: {msg['content']}\n"
+            
+            # Add previous session context if available
+            session_context = ""
+            if coaching_history and len(coaching_history) > 0:
+                last_session = coaching_history[0]
+                if last_session.get('technical_focus'):
+                    session_context = f"\nPrevious session focus: {last_session['technical_focus']}"
+            
+            # Claude-only prompt (no Pinecone chunks)
+            claude_only_prompt = f"""You are Coach Taai, a professional tennis coach providing remote coaching advice through chat.
+```
 
-Player: {player_name or 'the player'} (Level: {player_level or 'beginner'})
+{get_coaching_personality_enhancement()}
+
+Player: {player_name or ‘the player’} (Level: {player_level or ‘beginner’})
 
 COACHING APPROACH:
+
 - Give direct, actionable tennis advice
-- Ask 1-2 follow-up questions about their specific situation  
-- End with encouragement like "How does that sound?" or "Ready to try this?"
+- Ask 1-2 follow-up questions about their specific situation
+- End with encouragement like “How does that sound?” or “Ready to try this?”
 - Keep responses SHORT (2-3 sentences total)
 - Focus on technique, solo drills, or mental game advice
 - Be encouraging and supportive
-- Remember you're coaching remotely - focus on what they can practice alone
+- Remember you’re coaching remotely - focus on what they can practice alone
 
 MEMORY RULES:
-- NEVER ask about their level - you know they are {player_level or 'a beginner'}
-- NEVER ask their name - you are coaching {player_name or 'this player'}
-- Remember what you've discussed in this session
+
+- NEVER ask about their level - you know they are {player_level or ‘a beginner’}
+- NEVER ask their name - you are coaching {player_name or ‘this player’}
+- Remember what you’ve discussed in this session
 
 {session_context}{recent_conversation}
 
-Player question: "{prompt}"
+Player question: “{prompt}”
 
-Provide direct coaching advice:"""
+Provide direct coaching advice:”””
 
-                response = query_claude(claude_client, claude_only_prompt)
-                
-                st.markdown(response)
-                
-                st.session_state.message_counter += 1
-                
-                st.session_state.messages.append({
-                    "role": "assistant", 
-                    "content": response
-                })
-                
-                # DUAL LOGGING: Log coach response (no chunks = 0 resources)
-                if st.session_state.get("player_record_id"):
-                    log_message_to_sss(
-                        st.session_state.player_record_id,
-                        st.session_state.session_id,
-                        st.session_state.message_counter,
-                        "assistant",
-                        response,
-                        []  # Empty chunks = 0 resources used
-                    )
-                    log_message_to_conversation_log(
-                        st.session_state.player_record_id,
-                        st.session_state.session_id,
-                        st.session_state.message_counter,
-                        "assistant",
-                        response,
-                        []  # Empty chunks = 0 resources used
-                    )
+```
+            response = query_claude(claude_client, claude_only_prompt)
+            
+            st.markdown(response)
+            
+            st.session_state.message_counter += 1
+            
+            st.session_state.messages.append({
+                "role": "assistant", 
+                "content": response
+            })
+            
+            # DUAL LOGGING: Log coach response (no chunks = 0 resources)
+            if st.session_state.get("player_record_id"):
+                log_message_to_sss(
+                    st.session_state.player_record_id,
+                    st.session_state.session_id,
+                    st.session_state.message_counter,
+                    "assistant",
+                    response,
+                    []  # Empty chunks = 0 resources used
+                )
+                log_message_to_conversation_log(
+                    st.session_state.player_record_id,
+                    st.session_state.session_id,
+                    st.session_state.message_counter,
+                    "assistant",
+                    response,
+                    []  # Empty chunks = 0 resources used
+                )
+```
 
-
-if __name__ == "__main__":
-    main()
+if **name** == “**main**”:
+main()
