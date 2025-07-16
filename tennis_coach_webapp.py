@@ -1385,10 +1385,10 @@ def assess_player_level_from_conversation(conversation_history: list, claude_cli
 
 
 def handle_introduction_sequence(user_message: str, claude_client):
-"""
-Enhanced introduction sequence with smooth conversational flow and Taai personality
-"""
-intro_state = st.session_state.get("intro_state", "waiting_for_name")
+    """
+    Enhanced introduction sequence with smooth conversational flow and Taai personality
+    """
+    intro_state = st.session_state.get("intro_state", "waiting_for_name")
 
 ```
 if intro_state == "waiting_for_name":
