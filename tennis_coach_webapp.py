@@ -2359,23 +2359,28 @@ def display_admin_interface(index, claude_client):
         st.markdown("### 🔧 Session Cleanup Testing")
         st.markdown("Test the abandoned session cleanup function safely.")
         
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
         
         with col1:
             st.markdown("#### 🧪 Dry Run Test")
-            st.markdown("See what would be cleaned up without making changes:")
+            st.markdown("See what would be cleaned up:")
             if st.button("🔍 Run Dry Run Test", type="secondary"):
                 with st.spinner("Checking for abandoned sessions..."):
                     cleanup_abandoned_sessions(claude_client, dry_run=True)
         
         with col2:
-            st.markdown("#### ⚠️ Actual Cleanup")
-            st.markdown("**WARNING: This will actually clean up abandoned sessions!**")
-            st.markdown("Only run this after confirming the dry run results look correct.")
-            
-            if st.button("🧹 Run Actual Cleanup", type="primary"):
+            st.markdown("#### 📋 Preview & Select")
+            st.markdown("Preview sessions and clean up individually:")
+            if st.button("👁️ Preview Sessions", type="secondary"):
+                with st.spinner("Loading session previews..."):
+                    cleanup_abandoned_sessions(claude_client, dry_run=False, preview_mode=True)
+        
+        with col3:
+            st.markdown("#### ⚠️ Bulk Cleanup")
+            st.markdown("Clean up all sessions at once:")
+            if st.button("🧹 Bulk Cleanup", type="primary"):
                 if st.checkbox("I understand this will modify the database"):
-                    with st.spinner("Cleaning up abandoned sessions..."):
+                    with st.spinner("Cleaning up all abandoned sessions..."):
                         cleanup_abandoned_sessions(claude_client, dry_run=False)
                 else:
                     st.warning("Please check the confirmation box first.")
