@@ -214,11 +214,11 @@ def create_new_player(email: str, name: str = "", tennis_level: str = ""):
             "Content-Type": "application/json"
         }
         
-        # Use provided name, or extract from email, or leave empty for Coach TA collection
+        # Use provided name, or extract from email, or leave empty for Coach Taai collection
         if name:
             player_name = name
         else:
-            # For new players, leave empty - Coach TA will collect it
+            # For new players, leave empty - Coach Taai will collect it
             player_name = ""
         
         # Prepare fields
@@ -1255,7 +1255,7 @@ def setup_player_session_with_continuity(player_email: str):
             st.session_state.player_level = ""
             st.session_state.welcome_followup = None
             
-            return "Hi! I'm Coach TA, your personal tennis coach. What's your name?"
+            return "Hi! I'm Coach Taai, your personal tennis coach. What's your name?"
         else:
             st.error("Error creating player profile. Please try again.")
             return None
@@ -2061,7 +2061,7 @@ def display_admin_interface(index, claude_client):
                                 st.markdown(f"""
                                 <div style="display: flex; justify-content: flex-end; margin: 10px 0;">
                                     <div style="background-color: #E8F5E8; padding: 10px 15px; border-radius: 18px; max-width: 70%; border: 1px solid #C8E6C9;">
-                                        <strong>Coach TA:</strong>{resource_indicator}<br>
+                                        <strong>Coach Taai:</strong>{resource_indicator}<br>
                                         {content}
                                     </div>
                                 </div>
@@ -2175,7 +2175,7 @@ def display_admin_interface(index, claude_client):
                                         st.markdown(f"""
                                         <div style="display: flex; justify-content: flex-end; margin: 10px 0;">
                                             <div style="background-color: #E8F5E8; padding: 10px 15px; border-radius: 18px; max-width: 70%; border: 1px solid #C8E6C9;">
-                                                <strong>Coach TA:</strong>{resource_indicator}<br>
+                                                <strong>Coach Taai:</strong>{resource_indicator}<br>
                                                 {content}
                                             </div>
                                         </div>
