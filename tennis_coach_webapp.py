@@ -2443,10 +2443,38 @@ def display_admin_interface(index, claude_client):
     """Enhanced admin interface reading from Active_Sessions for resource analytics"""
     st.title("🔧 Tennis Coach AI - Admin Interface")
     st.markdown("### Session Management & Player Analytics")
+    
+    # ADMIN COACHING MODE CONTROL
+    st.markdown("---")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        coaching_mode = st.radio(
+            "🎯 Coaching Mode (Controls All User Sessions)",
+            ["🤖 Auto (Smart Fallback)", "🔍 Pinecone + Claude", "🧠 Claude Only"],
+            index=0 if not st.session_state.get('admin_coaching_mode') else 
+                  ["🤖 Auto (Smart Fallback)", "🔍 Pinecone + Claude", "🧠 Claude Only"].index(st.session_state.get('admin_coaching_mode')),
+            help="Auto: Pinecone+Claude, falls back to Claude-only if relevance < 0.65\nPinecone+Claude: Always uses database\nClaude Only: Uses Claude's general knowledge"
+        )
+        st.session_state.admin_coaching_mode = coaching_mode
+    
+    with col2:
+        if coaching_mode in ["🤖 Auto (Smart Fallback)", "🔍 Pinecone + Claude"]:
+            top_k = st.slider("Coaching resources", 1, 8, 3, key="admin_coaching_resources_slider")
+            st.session_state.admin_top_k = top_k
+        else:
+            st.session_state.admin_top_k = 0
+        
+        # Show current mode status
+        if 'last_coaching_mode_used' in st.session_state:
+            st.markdown("**Last Response Mode:**")
+            st.markdown(st.session_state.last_coaching_mode_used)
+    
     st.markdown("---")
     
     # Create tabs for different views
     tab1, tab2, tab3, tab4 = st.tabs(["📊 All Sessions", "👥 Player Engagement", "🧪 RAG Sandbox", "🔧 Cleanup Test"])
+    
     
     with tab1:
         # Session overview from Active_Sessions
@@ -2739,33 +2767,18 @@ def main():
     
     with st.sidebar:
         st.header("🔧 Admin Controls")
-        
-        # Add three-way coaching mode toggle
-        coaching_mode = st.radio(
-            "🎯 Coaching Mode",
-            ["🤖 Auto (Smart Fallback)", "🔍 Pinecone + Claude", "🧠 Claude Only"],
-            index=0,
-            help="Auto: Pinecone+Claude, falls back to Claude-only if relevance < 0.65\nPinecone+Claude: Always uses database\nClaude Only: Uses Claude's general knowledge"
-        )
-        
-        # Only show slider if using Pinecone modes
-        if coaching_mode in ["🤖 Auto (Smart Fallback)", "🔍 Pinecone + Claude"]:
-            top_k = st.slider("Coaching resources", 1, 8, 3, key="coaching_resources_slider")
-        else:
-            top_k = 0
-        
-        # Debug info for admin
-        if 'last_coaching_mode_used' in st.session_state:
-            st.markdown("**Last Response Mode:**")
-            st.markdown(st.session_state.last_coaching_mode_used)
-        
+    
+        # Get coaching mode from session state (set by admin)
+        coaching_mode = st.session_state.get('admin_coaching_mode', '🤖 Auto (Smart Fallback)')
+        top_k = st.session_state.get('admin_top_k', 3)
+    
         if st.button("🔄 New Session"):
             st.session_state.messages = []
             st.session_state.conversation_log = []
             st.session_state.player_setup_complete = False
             st.session_state.welcome_followup = None
             st.session_state.recent_greetings = []
-            st.rerun()
+            st.rerun()    
     
     # PLAYER SETUP FORM
     if not st.session_state.get("player_setup_complete"):
