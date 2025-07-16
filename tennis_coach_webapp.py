@@ -586,7 +586,7 @@ def process_completed_session(player_record_id: str, session_id: str, claude_cli
     except Exception as e:
         return False
 
-def cleanup_abandoned_sessions(dry_run=True):
+def cleanup_abandoned_sessions(claude_client, dry_run=True):
     """Mark old active sessions as completed and generate summaries"""
     try:
         url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
@@ -2047,7 +2047,7 @@ def display_admin_interface(index, claude_client):
     st.markdown("---")
     
     # Create tabs for different views
-    tab1, tab2, tab3 = st.tabs(["📊 All Sessions", "👥 Player Engagement", "🧪 RAG Sandbox"])
+    tab1, tab2, tab3, tab4 = st.tabs(["📊 All Sessions", "👥 Player Engagement", "🧪 RAG Sandbox", "🔧 Cleanup Test"])
     
     with tab1:
         # Session overview from Active_Sessions
@@ -2268,6 +2268,31 @@ def display_admin_interface(index, claude_client):
                                                 st.text(msg['resource_details'])
                 else:
                     st.warning("No sessions found for this player.")
+    
+    with tab4:
+        st.markdown("### 🔧 Session Cleanup Testing")
+        st.markdown("Test the abandoned session cleanup function safely.")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("#### 🧪 Dry Run Test")
+            st.markdown("See what would be cleaned up without making changes:")
+            if st.button("🔍 Run Dry Run Test", type="secondary"):
+                with st.spinner("Checking for abandoned sessions..."):
+                    cleanup_abandoned_sessions(claude_client, dry_run=True)
+        
+        with col2:
+            st.markdown("#### ⚠️ Actual Cleanup")
+            st.markdown("**WARNING: This will actually clean up abandoned sessions!**")
+            st.markdown("Only run this after confirming the dry run results look correct.")
+            
+            if st.button("🧹 Run Actual Cleanup", type="primary"):
+                if st.checkbox("I understand this will modify the database"):
+                    with st.spinner("Cleaning up abandoned sessions..."):
+                        cleanup_abandoned_sessions(claude_client, dry_run=False)
+                else:
+                    st.warning("Please check the confirmation box first.")
     
     with tab3:
         try:
