@@ -91,7 +91,7 @@ def query_pinecone(index, question: str, top_k: int = 3) -> List[Dict]:
         return []
 
 def get_coaching_personality_enhancement():
-    return “””
+    return """
 COACHING BEHAVIOR ANCHORS:
 
 - Acknowledge feelings first: “That sounds frustrating…” “I hear you saying…”
@@ -102,7 +102,7 @@ COACHING BEHAVIOR ANCHORS:
 - For brief responses: acknowledge + assume + ask follow-up
 - Ask one specific follow-up question
 - Keep total response under 3 sentences
-  “””
+  """
 
 def build_conversational_prompt(question: str, chunks: List[Dict], conversation_history: List[Dict]) -> str:
     context_sections = []
