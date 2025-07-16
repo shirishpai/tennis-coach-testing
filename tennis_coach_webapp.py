@@ -89,6 +89,21 @@ def query_pinecone(index, question: str, top_k: int = 3) -> List[Dict]:
     except Exception as e:
         st.error(f"Pinecone query error: {e}")
         return []
+
+def get_coaching_personality_enhancement():
+return “””
+COACHING BEHAVIOR ANCHORS:
+
+- Acknowledge feelings first: “That sounds frustrating…” “I hear you saying…”
+- Brief coaching stories: “I had a player who…” “I remember working with someone who…” (max 1 sentence)
+- Learning wisdom: Acknowledge that practice, unlearning, focus, and repetition are challenging but necessary
+- Use transitions: “That makes sense…” “Here’s what helped them…”
+- Protégé effect moments: “Your questions are making me think about this differently” “Teaching this helps me too”
+- For brief responses: acknowledge + assume + ask follow-up
+- Ask one specific follow-up question
+- Keep total response under 3 sentences
+  “””
+
 def build_conversational_prompt(question: str, chunks: List[Dict], conversation_history: List[Dict]) -> str:
     context_sections = []
     for i, chunk in enumerate(chunks):
