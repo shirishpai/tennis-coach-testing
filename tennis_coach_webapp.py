@@ -1392,7 +1392,7 @@ Give direct coaching advice:"""
 def get_smart_coaching_response(prompt, index, claude_client, coaching_mode, top_k):
     """
     Smart coaching response with three modes:
-    - Auto: Pinecone+Claude with fallback to Claude-only if relevance < 0.65
+    - Auto: Pinecone+Claude with fallback to Claude-only if relevance < admin-set threshold (default 0.45)
     - Pinecone+Claude: Always use Pinecone
     - Claude Only: Never use Pinecone
     """
@@ -1456,7 +1456,8 @@ Provide direct coaching advice:"""
         
         # Check relevance for Auto mode
         if coaching_mode == "🤖 Auto (Smart Fallback)":
-            relevant_chunks = [chunk for chunk in chunks if chunk['score'] >= 0.65]
+            fallback_threshold = st.session_state.get('admin_fallback_threshold', 0.45)
+            relevant_chunks = [chunk for chunk in chunks if chunk['score'] >= fallback_threshold]
             max_relevance = max([chunk['score'] for chunk in chunks]) if chunks else 0.0
             
             if not relevant_chunks:
@@ -2657,16 +2658,28 @@ def display_admin_interface(index, claude_client):
         st.session_state.admin_coaching_mode = coaching_mode
     
     with col2:
-        if coaching_mode in ["🤖 Auto (Smart Fallback)", "🔍 Pinecone + Claude"]:
-            top_k = st.slider("Coaching resources", 1, 8, 3, key="admin_coaching_resources_slider")
-            st.session_state.admin_top_k = top_k
-        else:
-            st.session_state.admin_top_k = 0
-        
-        # Show current mode status
-        if 'last_coaching_mode_used' in st.session_state:
-            st.markdown("**Last Response Mode:**")
-            st.markdown(st.session_state.last_coaching_mode_used)
+    if coaching_mode in ["🤖 Auto (Smart Fallback)", "🔍 Pinecone + Claude"]:
+        top_k = st.slider("Coaching resources", 1, 8, 3, key="admin_coaching_resources_slider")
+        st.session_state.admin_top_k = top_k
+    else:
+        st.session_state.admin_top_k = 0
+    
+    # Add fallback threshold slider for Auto mode
+    if coaching_mode == "🤖 Auto (Smart Fallback)":
+        threshold = st.slider(
+            "Fallback Threshold", 
+            0.20, 0.80, 0.45, 0.05,
+            key="admin_fallback_threshold_slider",
+            help="Higher = stricter (more fallbacks), Lower = more permissive (fewer fallbacks)"
+        )
+        st.session_state.admin_fallback_threshold = threshold
+    else:
+        st.session_state.admin_fallback_threshold = 0.45  # Default
+    
+    # Show current mode status
+    if 'last_coaching_mode_used' in st.session_state:
+        st.markdown("**Last Response Mode:**")
+        st.markdown(st.session_state.last_coaching_mode_used)
     
     st.markdown("---")
     
