@@ -741,6 +741,123 @@ def cleanup_abandoned_sessions(claude_client, dry_run=True, preview_mode=False):
         st.error(f"Cleanup error: {e}")
         return False
 
+def mark_session_reviewed(session_id: str, admin_identifier: str = "admin") -> bool:
+    """Mark a session as reviewed by admin"""
+    try:
+        # We'll store review status in the session state and also try to persist it
+        if 'reviewed_sessions' not in st.session_state:
+            st.session_state.reviewed_sessions = set()
+        
+        st.session_state.reviewed_sessions.add(session_id)
+        
+        # Try to also store in a persistent way using Airtable
+        # We'll add a comment or note to one of the session records
+        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
+        headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
+        
+        # Find a record from this session to add review marker
+        params = {
+            "filterByFormula": f"{{session_id}} = {session_id}",
+            "maxRecords": 1
+        }
+        
+        response = requests.get(url, headers=headers, params=params)
+        if response.status_code == 200:
+            records = response.json().get('records', [])
+            if records:
+                record_id = records[0]['id']
+                
+                # Add review marker to the record
+                update_url = f"{url}/{record_id}"
+                update_headers = {
+                    "Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}",
+                    "Content-Type": "application/json"
+                }
+                
+                # Add or update a review field - we'll use resource_details field to store review info
+                current_details = records[0].get('fields', {}).get('resource_details', '')
+                review_marker = f"\n[ADMIN_REVIEWED: {admin_identifier} on {datetime.now().strftime('%Y-%m-%d %H:%M')}]"
+                
+                update_data = {
+                    "fields": {
+                        "resource_details": current_details + review_marker
+                    }
+                }
+                
+                requests.patch(update_url, headers=update_headers, json=update_data)
+        
+        return True
+        
+    except Exception as e:
+        return False
+
+def is_session_reviewed(session_id: str) -> bool:
+    """Check if a session has been reviewed by admin"""
+    try:
+        # Check session state first
+        if 'reviewed_sessions' not in st.session_state:
+            st.session_state.reviewed_sessions = set()
+        
+        if session_id in st.session_state.reviewed_sessions:
+            return True
+        
+        # Check database for persistent review marker
+        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
+        headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
+        
+        params = {
+            "filterByFormula": f"{{session_id}} = {session_id}",
+            "maxRecords": 1
+        }
+        
+        response = requests.get(url, headers=headers, params=params)
+        if response.status_code == 200:
+            records = response.json().get('records', [])
+            if records:
+                resource_details = records[0].get('fields', {}).get('resource_details', '')
+                if '[ADMIN_REVIEWED:' in resource_details:
+                    # Add to session state for faster future checks
+                    st.session_state.reviewed_sessions.add(session_id)
+                    return True
+        
+        return False
+        
+    except Exception as e:
+        return False
+
+def get_review_status(session_id: str) -> dict:
+    """Get detailed review status for a session"""
+    try:
+        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
+        headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
+        
+        params = {
+            "filterByFormula": f"{{session_id}} = {session_id}",
+            "maxRecords": 1
+        }
+        
+        response = requests.get(url, headers=headers, params=params)
+        if response.status_code == 200:
+            records = response.json().get('records', [])
+            if records:
+                resource_details = records[0].get('fields', {}).get('resource_details', '')
+                
+                if '[ADMIN_REVIEWED:' in resource_details:
+                    # Extract review info
+                    import re
+                    review_match = re.search(r'\[ADMIN_REVIEWED: (.*?) on (.*?)\]', resource_details)
+                    if review_match:
+                        return {
+                            'reviewed': True,
+                            'reviewer': review_match.group(1),
+                            'review_date': review_match.group(2)
+                        }
+        
+        return {'reviewed': False, 'reviewer': None, 'review_date': None}
+        
+    except Exception as e:
+        return {'reviewed': False, 'reviewer': None, 'review_date': None}
+
 def log_message_to_sss(player_record_id: str, session_id: str, message_order: int, role: str, content: str, chunks=None) -> bool:
     try:
         url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
