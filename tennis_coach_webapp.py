@@ -1368,8 +1368,69 @@ def generate_followup_message(player_name: str, last_session_summary: dict, sess
 
 def setup_player_session_with_continuity(player_email: str):
     """
-    Enhanced player setup with immediate two-message welcome system
+    Enhanced player setup with immediate two-message welcome system and automatic cleanup
     """
+    # Clean up any abandoned sessions first (silent cleanup)
+    try:
+        # Run cleanup silently in background - don't show messages to user
+        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
+        headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
+        
+        # Find sessions older than 15 minutes that are still "active"
+        from datetime import datetime, timedelta
+        cutoff_time = (datetime.now() - timedelta(minutes=15)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        
+        params = {
+            "filterByFormula": f"AND({{session_status}} = 'active', {{timestamp}} < '{cutoff_time}')",
+            "sort[0][field]": "session_id",
+            "sort[0][direction]": "desc"
+        }
+        
+        response = requests.get(url, headers=headers, params=params)
+        if response.status_code == 200:
+            all_abandoned_records = response.json().get('records', [])
+            
+            # Group by session_id and filter out admin sessions
+            session_groups = {}
+            for record in all_abandoned_records:
+                fields = record.get('fields', {})
+                session_id = fields.get('session_id')
+                message_content = fields.get('message_content', '')
+                
+                if not session_id or 'hilly spike' in message_content.lower():
+                    continue
+                
+                if session_id not in session_groups:
+                    session_groups[session_id] = {
+                        'session_id': session_id,
+                        'player_ids': fields.get('player_id', []),
+                        'message_count': 0
+                    }
+                session_groups[session_id]['message_count'] += 1
+            
+            # Only clean up sessions with 4+ messages (real coaching sessions)
+            for session_id, session_data in session_groups.items():
+                if session_data['message_count'] >= 4 and session_data['player_ids']:
+                    player_id = session_data['player_ids'][0]
+                    
+                    # Mark session as completed
+                    session_marked = mark_session_completed(player_id, str(session_id))
+                    
+                    if session_marked:
+                        # Generate summary silently
+                        try:
+                            # Get connections for summary generation
+                            _, claude_client = setup_connections()
+                            if claude_client:
+                                process_completed_session(player_id, str(session_id), claude_client)
+                        except:
+                            pass  # Don't let summary errors stop session startup
+        
+    except Exception as e:
+        # Don't let cleanup errors stop the session startup
+        pass
+    
+    # Continue with normal session setup
     existing_player = find_player_by_email(player_email)
     
     if existing_player:
