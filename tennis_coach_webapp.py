@@ -102,7 +102,7 @@ COACHING BEHAVIOR ANCHORS:
 - For brief responses: acknowledge + assume + ask follow-up
 - Ask one specific follow-up question
 - Keep total response under 3 sentences
-  """
+"""
 
 def build_conversational_prompt(question: str, chunks: List[Dict], conversation_history: List[Dict]) -> str:
     context_sections = []
