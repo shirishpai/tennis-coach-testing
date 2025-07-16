@@ -607,54 +607,66 @@ def cleanup_abandoned_sessions(claude_client, dry_run=True):
             st.error(f"Failed to fetch sessions: {response.status_code}")
             return False
         
-        all_abandoned_sessions = response.json().get('records', [])
+        all_abandoned_records = response.json().get('records', [])
         
-        # Filter out admin sessions and single-message sessions
-        legitimate_sessions = []
+        # Group messages by session_id and filter out admin sessions
+        session_groups = {}
         admin_sessions_skipped = 0
         
-        for session_record in all_abandoned_sessions:
-            fields = session_record.get('fields', {})
+        for record in all_abandoned_records:
+            fields = record.get('fields', {})
             session_id = fields.get('session_id')
             message_content = fields.get('message_content', '').lower()
             
+            if not session_id:
+                continue
+                
             # Skip admin sessions (contain "hilly spike" or admin-related content)
             if any(admin_phrase in message_content for admin_phrase in [
-                'hilly spike', 'admin mode', 'coach taai, what is your name'
+                'hilly spike', 'admin mode'
             ]):
                 admin_sessions_skipped += 1
                 continue
             
-            # Skip single intro messages without real coaching
-            if any(intro_phrase in message_content for intro_phrase in [
-                "hi! i'm coach taai", "what's your name", "nice to meet you"
-            ]) and len(message_content) < 100:
+            # Group by session_id
+            if session_id not in session_groups:
+                session_groups[session_id] = {
+                    'session_id': session_id,
+                    'player_ids': fields.get('player_id', []),
+                    'message_count': 0,
+                    'first_timestamp': fields.get('timestamp', ''),
+                    'messages': []
+                }
+            
+            session_groups[session_id]['message_count'] += 1
+            session_groups[session_id]['messages'].append(message_content[:50])
+        
+        # Filter out sessions that are just intro messages (less than 3 messages)
+        legitimate_sessions = []
+        for session_id, session_data in session_groups.items():
+            if session_data['message_count'] >= 3:  # Only real coaching sessions
+                legitimate_sessions.append(session_data)
+            else:
                 admin_sessions_skipped += 1
-                continue
-                
-            legitimate_sessions.append(session_record)
         
         if dry_run:
             st.write(f"DRY RUN: Would clean up {len(legitimate_sessions)} legitimate abandoned sessions")
             st.write(f"Skipped {admin_sessions_skipped} admin/intro sessions")
             
             # Show details of what would be cleaned up
-            for session_record in legitimate_sessions:
-                fields = session_record.get('fields', {})
-                session_id = fields.get('session_id')
-                timestamp = fields.get('timestamp', '')
-                message_preview = fields.get('message_content', '')[:50] + "..."
-                st.write(f"- Session {session_id} from {timestamp}")
-                st.write(f"  Preview: {message_preview}")
+            for session_data in legitimate_sessions:
+                session_id = session_data['session_id']
+                message_count = session_data['message_count']
+                timestamp = session_data['first_timestamp']
+                st.write(f"- Session {session_id}: {message_count} messages from {timestamp}")
                 
             return True
             
         # Actual cleanup code only runs when dry_run=False
         cleanup_count = 0
-        for session_record in legitimate_sessions:
-            fields = session_record.get('fields', {})
-            session_id = fields.get('session_id')
-            player_ids = fields.get('player_id', [])
+        for session_data in legitimate_sessions:
+            session_id = session_data['session_id']
+            player_ids = session_data['player_ids']
             
             if session_id and player_ids:
                 player_id = player_ids[0]
@@ -667,7 +679,7 @@ def cleanup_abandoned_sessions(claude_client, dry_run=True):
                     summary_created = process_completed_session(player_id, str(session_id), claude_client)
                     if summary_created:
                         cleanup_count += 1
-                        st.write(f"✅ Cleaned up session {session_id}")
+                        st.write(f"✅ Cleaned up session {session_id} ({session_data['message_count']} messages)")
                     else:
                         st.write(f"⚠️ Session {session_id} marked complete but summary failed")
                 else:
