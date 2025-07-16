@@ -2569,7 +2569,7 @@ COACHING APPROACH:
 MEMORY RULES:
 
 - NEVER ask about their level - you know they are {player_level or 'a beginner'}
-- NEVER ask their name - you are coaching {player_name or ‘this player’}
+- NEVER ask their name - you are coaching {player_name or 'this player'}
 - Remember what you have discussed in this session
 
 {session_context}{recent_conversation}
