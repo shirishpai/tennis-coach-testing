@@ -843,7 +843,7 @@ Tennis Knowledge: {context_text}
 
 Player says: "{user_question}"
 
-Respond naturally as Coach Taai:”””
+Respond naturally as Coach Taai:"""
 
 ```
 else:
@@ -864,21 +864,21 @@ You provide direct, actionable tennis coaching advice.
 COACHING APPROACH:
 
 - Ask 1-2 quick questions about their specific situation
-- Give ONE specific tip or drill appropriate for {player_level or ‘their current’} level
-- End with encouragement like “How about we try this?” or “Sound good?”
+- Give ONE specific tip or drill appropriate for {player_level or 'their current'} level
+- End with encouragement like "How about we try this?" or "Sound good?"
 - Keep responses SHORT (2-3 sentences total)
 - Be encouraging and practical
 - Focus on actionable advice they can practice alone
 
 MEMORY RULES:
 
-- NEVER ask about their level - you know they are {player_level or ‘at their current level’}
-- NEVER ask their name - you are coaching {player_name or ‘this player’}
+- NEVER ask about their level - you know they are {player_level or 'at their current level'}
+- NEVER ask their name - you are coaching {player_name or 'this player'}
 - Remember what you suggested earlier in this session
 
-NEVER say “Hi there” or greet again - you’re already in conversation.
+NEVER say "Hi there" or greet again - you’re already in conversation.
 NEVER include meta-commentary about your process.
-Just give direct coaching advice.”””
+Just give direct coaching advice."""
 
 ```
     # Add previous session context
@@ -927,9 +927,9 @@ Just give direct coaching advice.”””
 
 Tennis Knowledge: {context_text}
 
-Player says: “{user_question}”
+Player says: "{user_question}"
 
-Give direct coaching advice:”””
+Give direct coaching advice:"""
 
 def extract_name_from_response(user_message: str) -> str:
     """
