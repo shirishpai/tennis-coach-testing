@@ -2515,17 +2515,18 @@ def main():
                 # Build conversation context
                 recent_conversation = ""
                 if len(st.session_state.messages) > 1:
-                    recent_conversation = "\nRecent conversation:\n"
-                    for msg in st.session_state.messages[-6:]:  # Last 6 messages
+                    recent_conversation = "\nCURRENT SESSION CONVERSATION:\n"
+                    for msg in st.session_state.messages[-10:]:  # Increased to 10 messages
                         role = "Player" if msg['role'] == 'user' else "Coach Taai"
                         recent_conversation += f"{role}: {msg['content']}\n"
                 
-                # Add previous session context if available
+                # Add previous session context ONLY if current session is new/short
                 session_context = ""
-                if coaching_history and len(coaching_history) > 0:
+                if coaching_history and len(coaching_history) > 0 and len(st.session_state.messages) <= 4:
                     last_session = coaching_history[0]
                     if last_session.get('technical_focus'):
                         session_context = f"\nPrevious session focus: {last_session['technical_focus']}"
+                        session_context += f"\nNOTE: Focus on current conversation topic, not previous session topics."                
                 
                 # Claude-only prompt (no Pinecone chunks)
                 claude_only_prompt = f"""You are Coach Taai, a professional tennis coach providing remote coaching advice through chat.
