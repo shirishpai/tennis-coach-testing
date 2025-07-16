@@ -1389,93 +1389,80 @@ def handle_introduction_sequence(user_message: str, claude_client):
     Enhanced introduction sequence with smooth conversational flow and Taai personality
     """
     intro_state = st.session_state.get("intro_state", "waiting_for_name")
-
-
-if intro_state == "waiting_for_name":
-    # Extract name from user response
-    player_name = extract_name_from_response(user_message)
-    if player_name:
-        st.session_state.collected_name = player_name
-        st.session_state.intro_state = "checking_if_new"
-        return f"Nice to meet you, {player_name}! I'm excited to coach you. Tell me, are you pretty new to tennis?"
-
-elif intro_state == "checking_if_new":
-    user_lower = user_message.lower().strip()
     
-    # Check for clear "yes" responses to being new
-    yes_responses = ["yes", "yeah", "yep", "sure", "i am", "pretty new", "very new", "just started"]
-    if any(response in user_lower for response in yes_responses):
-        # Clear beginner - update player and finish intro
+    if intro_state == "waiting_for_name":
+        player_name = extract_name_from_response(user_message)
+        if player_name:
+            st.session_state.collected_name = player_name
+            st.session_state.intro_state = "checking_if_new"
+            return f"Nice to meet you, {player_name}! I'm excited to coach you. Tell me, are you pretty new to tennis?"
+    
+    elif intro_state == "checking_if_new":
+        user_lower = user_message.lower().strip()
+        
+        yes_responses = ["yes", "yeah", "yep", "sure", "i am", "pretty new", "very new", "just started"]
+        if any(response in user_lower for response in yes_responses):
+            success = update_player_info(
+                st.session_state.player_record_id,
+                st.session_state.collected_name,
+                "Beginner"
+            )
+            st.session_state.intro_completed = True
+            st.session_state.intro_state = "complete"
+            return "That's wonderful - everyone starts somewhere! What's got you most curious about tennis right now?"
+        
+        experience_indicators = [
+            "no", "nope", "not really", "not new", "been playing", 
+            "playing for", "year", "years", "months", "while now",
+            "some time", "a bit", "experienced"
+        ]
+        
+        if any(indicator in user_lower for indicator in experience_indicators):
+            st.session_state.intro_state = "asking_frequency"
+            return "I hear you saying you have some experience - that's great! How often do you get to play these days?"
+        
+        st.session_state.intro_state = "asking_time"
+        return "Tell me a bit more about your tennis journey - I'd love to understand where you're coming from."
+    
+    elif intro_state == "asking_time":
+        user_lower = user_message.lower().strip()
+        
+        beginner_time_phrases = [
+            "few months", "couple months", "just started", "not long",
+            "recently", "6 months", "less than a year", "under a year"
+        ]
+        
+        if any(phrase in user_lower for phrase in beginner_time_phrases):
+            success = update_player_info(
+                st.session_state.player_record_id,
+                st.session_state.collected_name,
+                "Beginner"
+            )
+            st.session_state.intro_completed = True
+            st.session_state.intro_state = "complete"
+            return "That sounds like a perfect time to really focus on fundamentals! What's challenging you most on court?"
+        
+        st.session_state.intro_state = "asking_frequency"  
+        return "Nice! How often do you get to play? I'm curious about your routine."
+    
+    elif intro_state == "asking_frequency":
+        assessed_level = assess_player_level_from_conversation(st.session_state.messages, claude_client)
+        
         success = update_player_info(
             st.session_state.player_record_id,
             st.session_state.collected_name,
-            "Beginner"
+            assessed_level
         )
+        
         st.session_state.intro_completed = True
         st.session_state.intro_state = "complete"
-        return "That's wonderful - everyone starts somewhere! What's got you most curious about tennis right now?"
+        
+        if assessed_level == "Intermediate":
+            return "I can tell you've put in some good work! What's on your mind for today's session?"
+        else:
+            return "Perfect! What would you like to work on together today?"
     
-    # Check for responses that indicate experience - skip time question and go to frequency
-    experience_indicators = [
-        "no", "nope", "not really", "not new", "been playing", 
-        "playing for", "year", "years", "months", "while now",
-        "some time", "a bit", "experienced"
-    ]
-    
-    if any(indicator in user_lower for indicator in experience_indicators):
-        # They have experience - skip time question, go straight to frequency
-        st.session_state.intro_state = "asking_frequency"
-        return "I hear you saying you have some experience - that's great! How often do you get to play these days?"
-    
-    # Ambiguous response - ask for more details
-    st.session_state.intro_state = "asking_time"
-    return "Tell me a bit more about your tennis journey - I'd love to understand where you're coming from."
-
-elif intro_state == "asking_time":
-    user_lower = user_message.lower().strip()
-    
-    # Quick check for obvious beginner time indicators
-    beginner_time_phrases = [
-        "few months", "couple months", "just started", "not long",
-        "recently", "6 months", "less than a year", "under a year"
-    ]
-    
-    if any(phrase in user_lower for phrase in beginner_time_phrases):
-        # Clear beginner based on time
-        success = update_player_info(
-            st.session_state.player_record_id,
-            st.session_state.collected_name,
-            "Beginner"
-        )
-        st.session_state.intro_completed = True
-        st.session_state.intro_state = "complete"
-        return "That sounds like a perfect time to really focus on fundamentals! What's challenging you most on court?"
-    
-    # Any other response goes to frequency question
-    st.session_state.intro_state = "asking_frequency"  
-    return "Nice! How often do you get to play? I'm curious about your routine."
-
-elif intro_state == "asking_frequency":
-    # Now we have enough for assessment
-    assessed_level = assess_player_level_from_conversation(st.session_state.messages, claude_client)
-    
-    # Update player record with collected name and assessed level
-    success = update_player_info(
-        st.session_state.player_record_id,
-        st.session_state.collected_name,
-        assessed_level
-    )
-    
-    st.session_state.intro_completed = True
-    st.session_state.intro_state = "complete"
-    
-    # Acknowledge their level naturally with Taai personality
-    if assessed_level == "Intermediate":
-        return "I can tell you've put in some good work! What's on your mind for today's session?"
-    else:
-        return "Perfect! What would you like to work on together today?"
-
-return None
+    return None
 
 
 def get_current_player_info(player_record_id: str) -> tuple:
