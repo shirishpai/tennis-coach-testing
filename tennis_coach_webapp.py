@@ -91,7 +91,7 @@ def query_pinecone(index, question: str, top_k: int = 3) -> List[Dict]:
         return []
 
 def get_coaching_personality_enhancement():
-return “””
+    return “””
 COACHING BEHAVIOR ANCHORS:
 
 - Acknowledge feelings first: “That sounds frustrating…” “I hear you saying…”
