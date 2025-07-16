@@ -876,7 +876,7 @@ MEMORY RULES:
 - NEVER ask their name - you are coaching {player_name or 'this player'}
 - Remember what you suggested earlier in this session
 
-NEVER say "Hi there" or greet again - you're already in conversation.
+NEVER say "Hi there" or greet again - you are already in conversation.
 NEVER include meta-commentary about your process.
 Just give direct coaching advice."""
 
