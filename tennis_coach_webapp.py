@@ -945,6 +945,13 @@ def extract_name_from_response(user_message: str) -> str:
             name = parts[1].split()[0] if parts[1].split() else message
         else:
             name = message
+    elif "this is " in message.lower():
+        # Handle "this is [name]" pattern
+        parts = message.lower().split("this is ")
+        if len(parts) > 1:
+            name = parts[1].split()[0] if parts[1].split() else message
+        else:
+            name = message
     elif message.lower().startswith(("my name is ", "name is ")):
         name = message.split("is ", 1)[1] if "is " in message else message
     elif message.lower().startswith(("call me ", "it's ", "its ")):
