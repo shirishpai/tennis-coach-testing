@@ -2658,28 +2658,28 @@ def display_admin_interface(index, claude_client):
         st.session_state.admin_coaching_mode = coaching_mode
     
     with col2:
-    if coaching_mode in ["🤖 Auto (Smart Fallback)", "🔍 Pinecone + Claude"]:
-        top_k = st.slider("Coaching resources", 1, 8, 3, key="admin_coaching_resources_slider")
-        st.session_state.admin_top_k = top_k
-    else:
-        st.session_state.admin_top_k = 0
+        if coaching_mode in ["🤖 Auto (Smart Fallback)", "🔍 Pinecone + Claude"]:
+            top_k = st.slider("Coaching resources", 1, 8, 3, key="admin_coaching_resources_slider")
+            st.session_state.admin_top_k = top_k
+        else:
+            st.session_state.admin_top_k = 0
     
-    # Add fallback threshold slider for Auto mode
-    if coaching_mode == "🤖 Auto (Smart Fallback)":
-        threshold = st.slider(
-            "Fallback Threshold", 
-            0.20, 0.80, 0.45, 0.05,
-            key="admin_fallback_threshold_slider",
-            help="Higher = stricter (more fallbacks), Lower = more permissive (fewer fallbacks)"
-        )
-        st.session_state.admin_fallback_threshold = threshold
-    else:
-        st.session_state.admin_fallback_threshold = 0.45  # Default
+        # Add fallback threshold slider for Auto mode
+        if coaching_mode == "🤖 Auto (Smart Fallback)":
+            threshold = st.slider(
+                "Fallback Threshold", 
+                0.20, 0.80, 0.45, 0.05,
+                key="admin_fallback_threshold_slider",
+                help="Higher = stricter (more fallbacks), Lower = more permissive (fewer fallbacks)"
+            )
+            st.session_state.admin_fallback_threshold = threshold
+        else:
+            st.session_state.admin_fallback_threshold = 0.45  # Default
     
-    # Show current mode status
-    if 'last_coaching_mode_used' in st.session_state:
-        st.markdown("**Last Response Mode:**")
-        st.markdown(st.session_state.last_coaching_mode_used)
+        # Show current mode status
+        if 'last_coaching_mode_used' in st.session_state:
+            st.markdown("**Last Response Mode:**")
+            st.markdown(st.session_state.last_coaching_mode_used)
     
     st.markdown("---")
     
