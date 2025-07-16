@@ -594,7 +594,7 @@ def cleanup_abandoned_sessions(claude_client, dry_run=True, preview_mode=False):
         
         # Find sessions older than 30 minutes that are still "active"
         from datetime import datetime, timedelta
-        cutoff_time = (datetime.now() - timedelta(minutes=30)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        cutoff_time = (datetime.now() - timedelta(minutes=15)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
         
         params = {
             "filterByFormula": f"AND({{session_status}} = 'active', {{timestamp}} < '{cutoff_time}')",
