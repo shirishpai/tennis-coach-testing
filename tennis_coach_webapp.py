@@ -761,7 +761,7 @@ def enhanced_generate_personalized_welcome_message(player_name: str, session_num
     """
     if not is_returning or not recent_summaries:
         # NEW PLAYER - single message
-        return ("Hi! I'm Coach TA, your personal tennis coach. What's your name?", None)
+        return ("Hi! I'm Coach Taai, your personal tennis coach. What's your name?", None)
     
     # RETURNING PLAYER - two message system
     last_session = recent_summaries[0] if recent_summaries else {}
