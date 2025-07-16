@@ -586,6 +586,75 @@ def process_completed_session(player_record_id: str, session_id: str, claude_cli
     except Exception as e:
         return False
 
+def cleanup_abandoned_sessions(dry_run=True):
+    """Mark old active sessions as completed and generate summaries"""
+    try:
+        url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
+        headers = {"Authorization": f"Bearer {st.secrets['AIRTABLE_API_KEY']}"}
+        
+        # Find sessions older than 30 minutes that are still "active"
+        from datetime import datetime, timedelta
+        cutoff_time = (datetime.now() - timedelta(minutes=30)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        
+        params = {
+            "filterByFormula": f"AND({{session_status}} = 'active', {{timestamp}} < '{cutoff_time}')",
+            "sort[0][field]": "timestamp",
+            "sort[0][direction]": "desc"
+        }
+        
+        if dry_run:
+            # Just log what WOULD be cleaned up, don't actually change anything
+            response = requests.get(url, headers=headers, params=params)
+            if response.status_code == 200:
+                abandoned_sessions = response.json().get('records', [])
+                st.write(f"DRY RUN: Would clean up {len(abandoned_sessions)} abandoned sessions")
+                
+                # Show details of what would be cleaned up
+                for session_record in abandoned_sessions:
+                    fields = session_record.get('fields', {})
+                    session_id = fields.get('session_id')
+                    timestamp = fields.get('timestamp', '')
+                    st.write(f"- Session {session_id} from {timestamp}")
+                    
+            return True
+            
+        # Actual cleanup code only runs when dry_run=False
+        response = requests.get(url, headers=headers, params=params)
+        if response.status_code == 200:
+            abandoned_sessions = response.json().get('records', [])
+            
+            cleanup_count = 0
+            for session_record in abandoned_sessions:
+                fields = session_record.get('fields', {})
+                session_id = fields.get('session_id')
+                player_ids = fields.get('player_id', [])
+                
+                if session_id and player_ids:
+                    player_id = player_ids[0]
+                    
+                    # Mark session as completed
+                    session_marked = mark_session_completed(player_id, str(session_id))
+                    
+                    if session_marked:
+                        # Generate summary for the abandoned session
+                        summary_created = process_completed_session(player_id, str(session_id), claude_client)
+                        if summary_created:
+                            cleanup_count += 1
+                            st.write(f"✅ Cleaned up session {session_id}")
+                        else:
+                            st.write(f"⚠️ Session {session_id} marked complete but summary failed")
+                    else:
+                        st.write(f"❌ Failed to mark session {session_id} as complete")
+            
+            st.write(f"Successfully cleaned up {cleanup_count} abandoned sessions")
+            return True
+        
+        return False
+        
+    except Exception as e:
+        st.error(f"Cleanup error: {e}")
+        return False
+
 def log_message_to_sss(player_record_id: str, session_id: str, message_order: int, role: str, content: str, chunks=None) -> bool:
     try:
         url = f"https://api.airtable.com/v0/appTCnWCPKMYPUXK0/Active_Sessions"
