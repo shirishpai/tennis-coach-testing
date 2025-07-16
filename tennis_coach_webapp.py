@@ -602,54 +602,80 @@ def cleanup_abandoned_sessions(claude_client, dry_run=True):
             "sort[0][direction]": "desc"
         }
         
-        if dry_run:
-            # Just log what WOULD be cleaned up, don't actually change anything
-            response = requests.get(url, headers=headers, params=params)
-            if response.status_code == 200:
-                abandoned_sessions = response.json().get('records', [])
-                st.write(f"DRY RUN: Would clean up {len(abandoned_sessions)} abandoned sessions")
+        response = requests.get(url, headers=headers, params=params)
+        if response.status_code != 200:
+            st.error(f"Failed to fetch sessions: {response.status_code}")
+            return False
+        
+        all_abandoned_sessions = response.json().get('records', [])
+        
+        # Filter out admin sessions and single-message sessions
+        legitimate_sessions = []
+        admin_sessions_skipped = 0
+        
+        for session_record in all_abandoned_sessions:
+            fields = session_record.get('fields', {})
+            session_id = fields.get('session_id')
+            message_content = fields.get('message_content', '').lower()
+            
+            # Skip admin sessions (contain "hilly spike" or admin-related content)
+            if any(admin_phrase in message_content for admin_phrase in [
+                'hilly spike', 'admin mode', 'coach taai, what is your name'
+            ]):
+                admin_sessions_skipped += 1
+                continue
+            
+            # Skip single intro messages without real coaching
+            if any(intro_phrase in message_content for intro_phrase in [
+                "hi! i'm coach taai", "what's your name", "nice to meet you"
+            ]) and len(message_content) < 100:
+                admin_sessions_skipped += 1
+                continue
                 
-                # Show details of what would be cleaned up
-                for session_record in abandoned_sessions:
-                    fields = session_record.get('fields', {})
-                    session_id = fields.get('session_id')
-                    timestamp = fields.get('timestamp', '')
-                    st.write(f"- Session {session_id} from {timestamp}")
-                    
+            legitimate_sessions.append(session_record)
+        
+        if dry_run:
+            st.write(f"DRY RUN: Would clean up {len(legitimate_sessions)} legitimate abandoned sessions")
+            st.write(f"Skipped {admin_sessions_skipped} admin/intro sessions")
+            
+            # Show details of what would be cleaned up
+            for session_record in legitimate_sessions:
+                fields = session_record.get('fields', {})
+                session_id = fields.get('session_id')
+                timestamp = fields.get('timestamp', '')
+                message_preview = fields.get('message_content', '')[:50] + "..."
+                st.write(f"- Session {session_id} from {timestamp}")
+                st.write(f"  Preview: {message_preview}")
+                
             return True
             
         # Actual cleanup code only runs when dry_run=False
-        response = requests.get(url, headers=headers, params=params)
-        if response.status_code == 200:
-            abandoned_sessions = response.json().get('records', [])
+        cleanup_count = 0
+        for session_record in legitimate_sessions:
+            fields = session_record.get('fields', {})
+            session_id = fields.get('session_id')
+            player_ids = fields.get('player_id', [])
             
-            cleanup_count = 0
-            for session_record in abandoned_sessions:
-                fields = session_record.get('fields', {})
-                session_id = fields.get('session_id')
-                player_ids = fields.get('player_id', [])
+            if session_id and player_ids:
+                player_id = player_ids[0]
                 
-                if session_id and player_ids:
-                    player_id = player_ids[0]
-                    
-                    # Mark session as completed
-                    session_marked = mark_session_completed(player_id, str(session_id))
-                    
-                    if session_marked:
-                        # Generate summary for the abandoned session
-                        summary_created = process_completed_session(player_id, str(session_id), claude_client)
-                        if summary_created:
-                            cleanup_count += 1
-                            st.write(f"✅ Cleaned up session {session_id}")
-                        else:
-                            st.write(f"⚠️ Session {session_id} marked complete but summary failed")
+                # Mark session as completed
+                session_marked = mark_session_completed(player_id, str(session_id))
+                
+                if session_marked:
+                    # Generate summary for the abandoned session
+                    summary_created = process_completed_session(player_id, str(session_id), claude_client)
+                    if summary_created:
+                        cleanup_count += 1
+                        st.write(f"✅ Cleaned up session {session_id}")
                     else:
-                        st.write(f"❌ Failed to mark session {session_id} as complete")
-            
-            st.write(f"Successfully cleaned up {cleanup_count} abandoned sessions")
-            return True
+                        st.write(f"⚠️ Session {session_id} marked complete but summary failed")
+                else:
+                    st.write(f"❌ Failed to mark session {session_id} as complete")
         
-        return False
+        st.write(f"Successfully cleaned up {cleanup_count} legitimate abandoned sessions")
+        st.write(f"Skipped {admin_sessions_skipped} admin/intro sessions")
+        return True
         
     except Exception as e:
         st.error(f"Cleanup error: {e}")
