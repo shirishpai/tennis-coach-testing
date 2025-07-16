@@ -2671,8 +2671,7 @@ def display_admin_interface(index, claude_client):
     st.markdown("---")
     
     # Create tabs for different views
-    tab1, tab2, tab3, tab4 = st.tabs(["📊 All Sessions", "👥 Player Engagement", "🧪 RAG Sandbox", "🔧 Cleanup Test"])
-    
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 All Sessions", "👥 Player Engagement", "🧪 RAG Sandbox", "🔧 Cleanup Test", "📈 Fallback Analysis"])    
     
     with tab1:
         # Session overview from Active_Sessions
@@ -2932,6 +2931,168 @@ def display_admin_interface(index, claude_client):
             st.error(f"RAG Sandbox error: {e}")
             import traceback
             st.code(traceback.format_exc())
+
+    with tab5:
+        st.markdown("### 📈 Fallback Analysis & Content Gap Detection")
+        
+        # Create subtabs for the two features
+        analysis_tab1, analysis_tab2 = st.tabs(["🔍 Individual Session Analysis", "📊 Content Gap Detection"])
+        
+        with analysis_tab1:
+            st.markdown("#### 🔍 Individual Session Analysis")
+            st.markdown("Analyze fallback patterns for specific sessions")
+            
+            # Session selector for detailed analysis
+            sessions = get_all_coaching_sessions()
+            if sessions:
+                session_options = {}
+                for session in sessions[:20]:  # Show last 20 sessions
+                    timestamp = session['timestamp']
+                    try:
+                        dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                        formatted_time = dt.strftime("%m/%d %H:%M")
+                    except:
+                        formatted_time = "Unknown time"
+                    
+                    status_emoji = "✅" if session['status'] == 'completed' else "🟡"
+                    fallback_indicator = "⚠️" if session['total_resources'] == 0 else "🔍"
+                    display_name = f"{status_emoji} {fallback_indicator} Session {session['session_id']} | {session['message_count']} msgs | {formatted_time}"
+                    session_options[display_name] = session['session_id']
+                
+                selected_session_display = st.selectbox(
+                    "Select session for detailed fallback analysis:",
+                    options=list(session_options.keys()),
+                    key="fallback_session_selector"
+                )
+                
+                if selected_session_display:
+                    selected_session_id = session_options[selected_session_display]
+                    
+                    # Get detailed fallback analysis
+                    with st.spinner("Analyzing session fallback patterns..."):
+                        fallback_details = analyze_session_fallback_details(selected_session_id)
+                    
+                    if fallback_details:
+                        st.markdown("##### 📋 Response-by-Response Analysis")
+                        
+                        # Create analysis table
+                        analysis_data = []
+                        for detail in fallback_details:
+                            analysis_data.append({
+                                'Response #': detail['message_order'],
+                                'Mode Used': detail['mode_used'],
+                                'Details': detail['mode_details'],
+                                'Resources': detail['resources_used'],
+                                'Preview': detail['message_preview']
+                            })
+                        
+                        if analysis_data:
+                            df = pd.DataFrame(analysis_data)
+                            st.dataframe(df, use_container_width=True)
+                            
+                            # Show detailed resource info for responses that used Pinecone
+                            st.markdown("##### 🔍 Detailed Resource Analysis")
+                            for detail in fallback_details:
+                                if detail['resources_used'] > 0 and detail['resource_details']:
+                                    with st.expander(f"Response #{detail['message_order']}: {detail['mode_used']} {detail['mode_details']}"):
+                                        st.markdown("**Coach Response Preview:**")
+                                        st.write(detail['message_preview'])
+                                        st.markdown("**Resources Used:**")
+                                        st.text(detail['resource_details'])
+                                        
+                                        # Show relevance scores if available
+                                        if detail['relevance_scores']:
+                                            st.markdown("**Relevance Scores:**")
+                                            for i, score in enumerate(detail['relevance_scores']):
+                                                color = "🟢" if score >= 0.7 else "🟡" if score >= 0.5 else "🔴"
+                                                st.write(f"{color} Resource {i+1}: {score:.3f}")
+                        else:
+                            st.info("No coach responses found in this session.")
+                    else:
+                        st.warning("Could not analyze this session.")
+            else:
+                st.warning("No sessions available for analysis.")
+        
+        with analysis_tab2:
+            st.markdown("#### 📊 Content Gap Detection")
+            st.markdown("Identify topics that frequently trigger fallbacks")
+            
+            if st.button("🔍 Analyze Content Gaps", type="primary"):
+                with st.spinner("Analyzing recent coaching sessions for content gaps..."):
+                    gap_analysis = detect_content_gaps()
+                
+                if gap_analysis:
+                    # Overall statistics
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Total Responses Analyzed", gap_analysis['total_responses'])
+                    with col2:
+                        st.metric("Fallback Count", gap_analysis['fallback_count'])
+                    with col3:
+                        fallback_rate = gap_analysis['fallback_rate']
+                        st.metric("Fallback Rate", f"{fallback_rate:.1f}%")
+                    
+                    st.markdown("---")
+                    
+                    # Content gap insights
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.markdown("##### 🔴 Topics Triggering Fallbacks")
+                        st.markdown("*These topics need more content in your database*")
+                        
+                        if gap_analysis['common_fallback_topics']:
+                            for keyword, count in gap_analysis['common_fallback_topics']:
+                                st.write(f"• **{keyword}** - {count} fallbacks")
+                        else:
+                            st.info("No common fallback topics found.")
+                        
+                        # Show recent fallback examples
+                        if gap_analysis['recent_fallbacks']:
+                            st.markdown("##### 📝 Recent Fallback Examples")
+                            for fallback in gap_analysis['recent_fallbacks']:
+                                st.write(f"• *\"{fallback['user_query']}\"*")
+                                if fallback['keywords']:
+                                    st.write(f"  Keywords: {', '.join(fallback['keywords'])}")
+                    
+                    with col2:
+                        st.markdown("##### 🟢 High-Performing Topics")
+                        st.markdown("*These topics work well with your current database*")
+                        
+                        if gap_analysis['high_performing_topics']:
+                            for keyword, count in gap_analysis['high_performing_topics']:
+                                st.write(f"• **{keyword}** - {count} high-relevance responses")
+                        else:
+                            st.info("No high-performing topics found.")
+                        
+                        # Show recent success examples
+                        if gap_analysis['recent_successes']:
+                            st.markdown("##### ✅ Recent Success Examples")
+                            for success in gap_analysis['recent_successes']:
+                                st.write(f"• *\"{success['user_query']}\"*")
+                                st.write(f"  Relevance: {success['relevance']:.2f}")
+                                if success['keywords']:
+                                    st.write(f"  Keywords: {', '.join(success['keywords'])}")
+                    
+                    st.markdown("---")
+                    
+                    # Recommendations
+                    st.markdown("##### 💡 Recommendations")
+                    if gap_analysis['fallback_rate'] > 30:
+                        st.warning(f"⚠️ High fallback rate ({gap_analysis['fallback_rate']:.1f}%) - Consider adding more content to your database")
+                    elif gap_analysis['fallback_rate'] > 15:
+                        st.info(f"📊 Moderate fallback rate ({gap_analysis['fallback_rate']:.1f}%) - Room for improvement")
+                    else:
+                        st.success(f"✅ Low fallback rate ({gap_analysis['fallback_rate']:.1f}%) - Database performing well")
+                    
+                    # Specific recommendations based on fallback topics
+                    if gap_analysis['common_fallback_topics']:
+                        st.markdown("**Suggested Content Additions:**")
+                        for keyword, count in gap_analysis['common_fallback_topics'][:3]:
+                            st.write(f"• Add more **{keyword}** content to reduce {count} fallbacks")
+                
+                else:
+                    st.error("Could not analyze content gaps. Please try again.")
     
     # Exit admin mode
     st.markdown("---")
