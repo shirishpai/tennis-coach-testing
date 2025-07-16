@@ -2087,7 +2087,7 @@ def display_admin_interface(index, claude_client):
                                 st.markdown(f"""
                                 <div style="display: flex; justify-content: flex-end; margin: 10px 0;">
                                     <div style="background-color: #E8F5E8; padding: 10px 15px; border-radius: 18px; max-width: 70%; border: 1px solid #C8E6C9;">
-                                        <strong>🎾 Coach TA:</strong>{resource_indicator}<br>
+                                        <strong>Coach TA:</strong>{resource_indicator}<br>
                                         {content}
                                     </div>
                                 </div>
