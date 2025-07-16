@@ -1191,6 +1191,141 @@ Player says: "{user_question}"
 
 Give direct coaching advice:"""
 
+def get_smart_coaching_response(prompt, index, claude_client, coaching_mode, top_k):
+    """
+    Smart coaching response with three modes:
+    - Auto: Pinecone+Claude with fallback to Claude-only if relevance < 0.65
+    - Pinecone+Claude: Always use Pinecone
+    - Claude Only: Never use Pinecone
+    """
+    
+    # Get player context
+    coaching_history = st.session_state.get('coaching_history', [])
+    player_name, player_level = get_current_player_info(st.session_state.get("player_record_id", ""))
+    
+    # Claude Only Mode
+    if coaching_mode == "🧠 Claude Only":
+        st.session_state.last_coaching_mode_used = "🧠 Claude-only mode active"
+        
+        # Build Claude-only prompt
+        recent_conversation = ""
+        if len(st.session_state.messages) > 1:
+            recent_conversation = "\nCURRENT SESSION CONVERSATION:\n"
+            for msg in st.session_state.messages[-10:]:
+                role = "Player" if msg['role'] == 'user' else "Coach Taai"
+                recent_conversation += f"{role}: {msg['content']}\n"
+        
+        session_context = ""
+        if coaching_history and len(coaching_history) > 0 and len(st.session_state.messages) <= 4:
+            last_session = coaching_history[0]
+            if last_session.get('technical_focus'):
+                session_context = f"\nPrevious session focus: {last_session['technical_focus']}"
+                session_context += f"\nNOTE: Focus on current conversation topic, not previous session topics."
+        
+        claude_only_prompt = f"""You are Coach Taai, a professional tennis coach providing remote coaching advice through chat.
+
+{get_coaching_personality_enhancement()}
+
+Player: {player_name or 'the player'} (Level: {player_level or 'beginner'})
+
+COACHING APPROACH:
+- Give direct, actionable tennis advice
+- Ask 1-2 follow-up questions about their specific situation  
+- End with encouragement like "How does that sound?" or "Ready to try this?"
+- Keep responses SHORT (2-3 sentences total)
+- Focus on technique, solo drills, or mental game advice
+- Be encouraging and supportive
+- Remember you are coaching remotely - focus on what they can practice alone
+
+MEMORY RULES:
+- NEVER ask about their level - you know they are {player_level or 'a beginner'}
+- NEVER ask their name - you are coaching {player_name or 'this player'}
+- Remember what you have discussed in this session
+
+{session_context}{recent_conversation}
+
+Player question: "{prompt}"
+
+Provide direct coaching advice:"""
+
+        response = query_claude(claude_client, claude_only_prompt)
+        return response, []
+    
+    # Pinecone modes (Auto or Always)
+    else:
+        # Query Pinecone
+        chunks = query_pinecone(index, prompt, top_k)
+        
+        # Check relevance for Auto mode
+        if coaching_mode == "🤖 Auto (Smart Fallback)":
+            relevant_chunks = [chunk for chunk in chunks if chunk['score'] >= 0.65]
+            max_relevance = max([chunk['score'] for chunk in chunks]) if chunks else 0.0
+            
+            if not relevant_chunks:
+                # Fallback to Claude-only
+                st.session_state.last_coaching_mode_used = f"⚠️ Fell back to Claude-only (max relevance: {max_relevance:.2f})"
+                
+                # Use Claude-only logic (same as above)
+                recent_conversation = ""
+                if len(st.session_state.messages) > 1:
+                    recent_conversation = "\nCURRENT SESSION CONVERSATION:\n"
+                    for msg in st.session_state.messages[-10:]:
+                        role = "Player" if msg['role'] == 'user' else "Coach Taai"
+                        recent_conversation += f"{role}: {msg['content']}\n"
+                
+                session_context = ""
+                if coaching_history and len(coaching_history) > 0 and len(st.session_state.messages) <= 4:
+                    last_session = coaching_history[0]
+                    if last_session.get('technical_focus'):
+                        session_context = f"\nPrevious session focus: {last_session['technical_focus']}"
+                        session_context += f"\nNOTE: Focus on current conversation topic, not previous session topics."
+                
+                claude_only_prompt = f"""You are Coach Taai, a professional tennis coach providing remote coaching advice through chat.
+
+{get_coaching_personality_enhancement()}
+
+Player: {player_name or 'the player'} (Level: {player_level or 'beginner'})
+
+COACHING APPROACH:
+- Give direct, actionable tennis advice
+- Ask 1-2 follow-up questions about their specific situation  
+- End with encouragement like "How does that sound?" or "Ready to try this?"
+- Keep responses SHORT (2-3 sentences total)
+- Focus on technique, solo drills, or mental game advice
+- Be encouraging and supportive
+- Remember you are coaching remotely - focus on what they can practice alone
+
+MEMORY RULES:
+- NEVER ask about their level - you know they are {player_level or 'a beginner'}
+- NEVER ask their name - you are coaching {player_name or 'this player'}
+- Remember what you have discussed in this session
+
+{session_context}{recent_conversation}
+
+Player question: "{prompt}"
+
+Provide direct coaching advice:"""
+
+                response = query_claude(claude_client, claude_only_prompt)
+                return response, []
+            
+            else:
+                # Use relevant chunks
+                chunks = relevant_chunks
+                st.session_state.last_coaching_mode_used = f"✅ Used Pinecone (relevance: {max_relevance:.2f})"
+        
+        else:
+            # Always use Pinecone mode
+            max_relevance = max([chunk['score'] for chunk in chunks]) if chunks else 0.0
+            st.session_state.last_coaching_mode_used = f"🔍 Pinecone+Claude forced (relevance: {max_relevance:.2f})"
+        
+        # Use Pinecone + Claude
+        prompt_with_context = build_conversational_prompt_with_history(
+            prompt, chunks, st.session_state.messages, coaching_history, player_name, player_level
+        )
+        response = query_claude(claude_client, prompt_with_context)
+        return response, chunks
+
 def extract_name_from_response(user_message: str) -> str:
     """
     Enhanced name extraction - handles complex responses better
@@ -2604,7 +2739,25 @@ def main():
     
     with st.sidebar:
         st.header("🔧 Admin Controls")
-        top_k = st.slider("Coaching resources", 1, 8, 3, key="coaching_resources_slider")
+        
+        # Add three-way coaching mode toggle
+        coaching_mode = st.radio(
+            "🎯 Coaching Mode",
+            ["🤖 Auto (Smart Fallback)", "🔍 Pinecone + Claude", "🧠 Claude Only"],
+            index=0,
+            help="Auto: Pinecone+Claude, falls back to Claude-only if relevance < 0.65\nPinecone+Claude: Always uses database\nClaude Only: Uses Claude's general knowledge"
+        )
+        
+        # Only show slider if using Pinecone modes
+        if coaching_mode in ["🤖 Auto (Smart Fallback)", "🔍 Pinecone + Claude"]:
+            top_k = st.slider("Coaching resources", 1, 8, 3, key="coaching_resources_slider")
+        else:
+            top_k = 0
+        
+        # Debug info for admin
+        if 'last_coaching_mode_used' in st.session_state:
+            st.markdown("**Last Response Mode:**")
+            st.markdown(st.session_state.last_coaching_mode_used)
         
         if st.button("🔄 New Session"):
             st.session_state.messages = []
@@ -2874,58 +3027,12 @@ def main():
                     st.rerun()
                 return
         
-        # CLAUDE-ONLY COACHING MODE (NO PINECONE)
+        # SMART COACHING MODE WITH THREE OPTIONS
         with st.chat_message("assistant"):
             with st.spinner("Coach is thinking..."):
-                coaching_history = st.session_state.get('coaching_history', [])
-                
-                # Get current player info from database
-                player_name, player_level = get_current_player_info(st.session_state.get("player_record_id", ""))
-                
-                # Build conversation context
-                recent_conversation = ""
-                if len(st.session_state.messages) > 1:
-                    recent_conversation = "\nCURRENT SESSION CONVERSATION:\n"
-                    for msg in st.session_state.messages[-10:]:  # Increased to 10 messages
-                        role = "Player" if msg['role'] == 'user' else "Coach Taai"
-                        recent_conversation += f"{role}: {msg['content']}\n"
-                
-                # Add previous session context ONLY if current session is new/short
-                session_context = ""
-                if coaching_history and len(coaching_history) > 0 and len(st.session_state.messages) <= 4:
-                    last_session = coaching_history[0]
-                    if last_session.get('technical_focus'):
-                        session_context = f"\nPrevious session focus: {last_session['technical_focus']}"
-                        session_context += f"\nNOTE: Focus on current conversation topic, not previous session topics."                
-                
-                # Claude-only prompt (no Pinecone chunks)
-                claude_only_prompt = f"""You are Coach Taai, a professional tennis coach providing remote coaching advice through chat.
-
-{get_coaching_personality_enhancement()}
-
-Player: {player_name or 'the player'} (Level: {player_level or 'beginner'})
-
-COACHING APPROACH:
-- Give direct, actionable tennis advice
-- Ask 1-2 follow-up questions about their specific situation  
-- End with encouragement like "How does that sound?" or "Ready to try this?"
-- Keep responses SHORT (2-3 sentences total)
-- Focus on technique, solo drills, or mental game advice
-- Be encouraging and supportive
-- Remember you are coaching remotely - focus on what they can practice alone
-
-MEMORY RULES:
-- NEVER ask about their level - you know they are {player_level or 'a beginner'}
-- NEVER ask their name - you are coaching {player_name or 'this player'}
-- Remember what you have discussed in this session
-
-{session_context}{recent_conversation}
-
-Player question: "{prompt}"
-
-Provide direct coaching advice:"""
-
-                response = query_claude(claude_client, claude_only_prompt)
+                response, chunks = get_smart_coaching_response(
+                    prompt, index, claude_client, coaching_mode, top_k
+                )
                 
                 st.markdown(response)
                 
@@ -2936,7 +3043,7 @@ Provide direct coaching advice:"""
                     "content": response
                 })
                 
-                # DUAL LOGGING: Log coach response (no chunks = 0 resources)
+                # DUAL LOGGING: Log coach response with chunks info
                 if st.session_state.get("player_record_id"):
                     log_message_to_sss(
                         st.session_state.player_record_id,
@@ -2944,7 +3051,7 @@ Provide direct coaching advice:"""
                         st.session_state.message_counter,
                         "assistant",
                         response,
-                        []  # Empty chunks = 0 resources used
+                        chunks
                     )
                     log_message_to_conversation_log(
                         st.session_state.player_record_id,
@@ -2952,9 +3059,8 @@ Provide direct coaching advice:"""
                         st.session_state.message_counter,
                         "assistant",
                         response,
-                        []  # Empty chunks = 0 resources used
+                        chunks
                     )
 
-
-if __name__ == "__main__":
-    main()
+if **name** == "**main**":
+main()
