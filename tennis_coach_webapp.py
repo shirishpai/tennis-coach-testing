@@ -937,21 +937,26 @@ def extract_name_from_response(user_message: str) -> str:
     # Handle common response patterns
     if message.lower().startswith(("i'm ", "im ")):
         name = message.split(" ", 1)[1] if len(message.split()) > 1 else message
-    elif message.lower().startswith("i am "):
-        name = message.split(" ", 2)[2] if len(message.split()) > 2 else message.split(" ", 1)[1]
+    elif "i am " in message.lower():
+        # Find "i am" anywhere in the message and get the word after it
+        parts = message.lower().split("i am ")
+        if len(parts) > 1:
+            name = parts[1].split()[0] if parts[1].split() else message
+        else:
+            name = message
     elif message.lower().startswith(("my name is ", "name is ")):
         name = message.split("is ", 1)[1] if "is " in message else message
     elif message.lower().startswith(("call me ", "it's ", "its ")):
         name = message.split(" ", 1)[1] if len(message.split()) > 1 else message
     else:
-        # For simple responses like "Bak" or "my name is Bak"
+        # For simple responses like "Bak" or just a name
         name = message
     
     # Clean up the extracted name
     name = name.strip().strip(',').strip('.')
     
     # Remove any remaining common words
-    cleanup_words = ["coach", "tennis", "player", "hi", "hello", "hey"]
+    cleanup_words = ["coach", "tennis", "player", "hi", "hello", "hey", "how", "are", "you"]
     name_words = name.split()
     cleaned_words = [word for word in name_words if word.lower() not in cleanup_words]
     
@@ -960,7 +965,7 @@ def extract_name_from_response(user_message: str) -> str:
         final_name = cleaned_words[0].title()
         return final_name
     
-    # Fallback to first word
+    # Fallback to first word that's not a common word
     return name.split()[0].title() if name.split() else message.title()
 
 def calculate_days_since_last_session(player_record_id: str) -> int:
