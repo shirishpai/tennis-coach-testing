@@ -2554,29 +2554,29 @@ if prompt := st.chat_input("Ask your tennis coach..."):
 
 {get_coaching_personality_enhancement()}
 
-Player: {player_name or ‘the player’} (Level: {player_level or ‘beginner’})
+Player: {player_name or 'the player'} (Level: {player_level or 'beginner'})
 
 COACHING APPROACH:
 
 - Give direct, actionable tennis advice
 - Ask 1-2 follow-up questions about their specific situation
-- End with encouragement like “How does that sound?” or “Ready to try this?”
+- End with encouragement like "How does that sound?" or "Ready to try this?"
 - Keep responses SHORT (2-3 sentences total)
 - Focus on technique, solo drills, or mental game advice
 - Be encouraging and supportive
-- Remember you’re coaching remotely - focus on what they can practice alone
+- Remember you are coaching remotely - focus on what they can practice alone
 
 MEMORY RULES:
 
-- NEVER ask about their level - you know they are {player_level or ‘a beginner’}
+- NEVER ask about their level - you know they are {player_level or 'a beginner'}
 - NEVER ask their name - you are coaching {player_name or ‘this player’}
-- Remember what you’ve discussed in this session
+- Remember what you have discussed in this session
 
 {session_context}{recent_conversation}
 
-Player question: “{prompt}”
+Player question: "{prompt}"
 
-Provide direct coaching advice:”””
+Provide direct coaching advice:"""
 
 ```
             response = query_claude(claude_client, claude_only_prompt)
@@ -2610,5 +2610,5 @@ Provide direct coaching advice:”””
                 )
 ```
 
-if **name** == “**main**”:
+if **name** == "**main**":
 main()
