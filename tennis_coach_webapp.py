@@ -2550,7 +2550,7 @@ if prompt := st.chat_input("Ask your tennis coach..."):
             
             # Claude-only prompt (no Pinecone chunks)
             claude_only_prompt = f"""You are Coach Taai, a professional tennis coach providing remote coaching advice through chat.
-```
+
 
 {get_coaching_personality_enhancement()}
 
@@ -2578,7 +2578,7 @@ Player question: "{prompt}"
 
 Provide direct coaching advice:"""
 
-```
+
             response = query_claude(claude_client, claude_only_prompt)
             
             st.markdown(response)
@@ -2608,7 +2608,7 @@ Provide direct coaching advice:"""
                     response,
                     []  # Empty chunks = 0 resources used
                 )
-```
+
 
 if **name** == "**main**":
 main()
