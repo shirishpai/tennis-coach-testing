@@ -778,65 +778,59 @@ def enhanced_generate_personalized_welcome_message(player_name: str, session_num
 
 # ENHANCED: Build conversational prompt with coaching history
 def build_conversational_prompt_with_history(user_question: str, context_chunks: list, conversation_history: list, coaching_history: list = None, player_name: str = None, player_level: str = None) -> str:
-"""Build Claude prompt with proper player context and memory"""
-
-```
-# Check if this is intro
-is_intro = not st.session_state.get("intro_completed", True)
-
-if is_intro:
-    # NEW PLAYER INTRODUCTION PROMPT
-    intro_prompt = f"""You are Coach Taai. Be natural and conversational.
-```
+    """Build Claude prompt with proper player context and memory"""
+    
+    # Check if this is intro
+    is_intro = not st.session_state.get("intro_completed", True)
+    
+    if is_intro:
+        # NEW PLAYER INTRODUCTION PROMPT
+        intro_prompt = f"""You are Coach Taai. Be natural and conversational.
 
 {get_coaching_personality_enhancement()}
 
 INTRODUCTION FLOW:
+- Start: "Hi! I'm Coach Taai, your personal tennis coach. What's your name?"
+- After name: "Nice to meet you, [Name]! I am excited, tell me about your tennis. You been playing long?"
+- After experience: "What's challenging you most on court right now?"
+- Then transition: "Great! How about we work on [specific area] today?"
 
-- Start: “Hi! I’m Coach Taai, your personal tennis coach. What’s your name?”
-- After name: “Nice to meet you, [Name]! I am excited, tell me about your tennis. You been playing long?”
-- After experience: “What’s challenging you most on court right now?”
-- Then transition: “Great! How about we work on [specific area] today?”
+Keep responses SHORT (1-2 sentences max). Be enthusiastic but concise."""
+        
+        # Add current conversation context for intro
+        history_text = ""
+        if conversation_history:
+            history_text = "\nCurrent conversation:\n"
+            for msg in conversation_history[-6:]:  # Last 6 exchanges
+                role = "Player" if msg['role'] == 'user' else "Coach Taai"
+                history_text += f"{role}: {msg['content']}\n"
+        
+        # Clean context chunks of debug text
+        cleaned_chunks = []
+        for chunk in context_chunks:
+            if chunk.get('text'):
+                content_text = chunk.get('text', '')
+                
+                # Remove debug patterns
+                debug_patterns = [
+                    "Wait for player response before giving specific drill instruction",
+                    "PATTERN 1", "PATTERN 2", "PATTERN 3",
+                    "Internal note:", "Coach instruction:",
+                    "DEBUG:", "Note to coach:", "Meta-commentary:",
+                    "[Debug]", "[Internal]", "Coach note:",
+                    "Wait for", "Before giving specific"
+                ]
+                
+                for pattern in debug_patterns:
+                    content_text = content_text.replace(pattern, "").strip()
+                
+                # Only include if there's meaningful content left
+                if len(content_text.strip()) > 10:
+                    cleaned_chunks.append(content_text)
 
-Keep responses SHORT (1-2 sentences max). Be enthusiastic but concise.”””
-
-```
-    # Add current conversation context for intro
-    history_text = ""
-    if conversation_history:
-        history_text = "\nCurrent conversation:\n"
-        for msg in conversation_history[-6:]:  # Last 6 exchanges
-            role = "Player" if msg['role'] == 'user' else "Coach Taai"
-            history_text += f"{role}: {msg['content']}\n"
-    
-    # Clean context chunks of debug text
-    cleaned_chunks = []
-    for chunk in context_chunks:
-        if chunk.get('text'):
-            content_text = chunk.get('text', '')
-            
-            # Remove debug patterns
-            debug_patterns = [
-                "Wait for player response before giving specific drill instruction",
-                "PATTERN 1", "PATTERN 2", "PATTERN 3",
-                "Internal note:", "Coach instruction:",
-                "DEBUG:", "Note to coach:", "Meta-commentary:",
-                "[Debug]", "[Internal]", "Coach note:",
-                "Wait for", "Before giving specific"
-            ]
-            
-            for pattern in debug_patterns:
-                content_text = content_text.replace(pattern, "").strip()
-            
-            # Only include if there's meaningful content left
-            if len(content_text.strip()) > 10:
-                cleaned_chunks.append(content_text)
-
-    context_text = "\n\n".join(cleaned_chunks)
-    
-    return f"""{intro_prompt}
-```
-
+        context_text = "\n\n".join(cleaned_chunks)
+        
+        return f"""{intro_prompt}
 {history_text}
 
 Tennis Knowledge: {context_text}
@@ -844,85 +838,78 @@ Tennis Knowledge: {context_text}
 Player says: "{user_question}"
 
 Respond naturally as Coach Taai:"""
-
-```
-else:
-    # REGULAR COACHING PROMPT WITH FULL CONTEXT
-    player_context = ""
-    if player_name and player_level:
-        player_context = f"Player: {player_name} (Level: {player_level})\n"
     
-    coaching_prompt = f"""You are Coach Taai coaching {player_name or 'the player'}.
-```
+    else:
+        # REGULAR COACHING PROMPT WITH FULL CONTEXT
+        player_context = ""
+        if player_name and player_level:
+            player_context = f"Player: {player_name} (Level: {player_level})\n"
+        
+        coaching_prompt = f"""You are Coach Taai coaching {player_name or 'the player'}.
 
 {get_coaching_personality_enhancement()}
 
 {player_context}
 
-You provide direct, actionable tennis coaching advice.
+You provide direct, actionable tennis coaching advice. 
 
 COACHING APPROACH:
-
 - Ask 1-2 quick questions about their specific situation
-- Give ONE specific tip or drill appropriate for {player_level or 'their current'} level
+- Give ONE specific tip or drill appropriate for {player_level or 'their current'} level  
 - End with encouragement like "How about we try this?" or "Sound good?"
 - Keep responses SHORT (2-3 sentences total)
 - Be encouraging and practical
 - Focus on actionable advice they can practice alone
 
 MEMORY RULES:
-
 - NEVER ask about their level - you know they are {player_level or 'at their current level'}
 - NEVER ask their name - you are coaching {player_name or 'this player'}
 - Remember what you suggested earlier in this session
 
-NEVER say "Hi there" or greet again - you are already in conversation.
+NEVER say "Hi there" or greet again - you're already in conversation.
 NEVER include meta-commentary about your process.
 Just give direct coaching advice."""
+        
+        # Add previous session context
+        history_text = ""
+        if coaching_history and len(coaching_history) > 0:
+            last_session = coaching_history[0]
+            if last_session.get('technical_focus'):
+                history_text += f"\nPrevious session focus: {last_session['technical_focus']}"
+        
+        # Add current conversation context
+        if conversation_history and len(conversation_history) > 1:
+            history_text += "\nCurrent session conversation:\n"
+            for msg in conversation_history[-10:]:  # Last 10 exchanges to maintain context
+                role = "Player" if msg['role'] == 'user' else "Coach Taai"
+                history_text += f"{role}: {msg['content']}\n"
+        
+        # Clean context chunks of debug text
+        cleaned_chunks = []
+        for chunk in context_chunks:
+            if chunk.get('text'):
+                content_text = chunk.get('text', '')
+                
+                # Remove debug patterns
+                debug_patterns = [
+                    "Wait for player response before giving specific drill instruction",
+                    "PATTERN 1", "PATTERN 2", "PATTERN 3",
+                    "Internal note:", "Coach instruction:",
+                    "DEBUG:", "Note to coach:", "Meta-commentary:",
+                    "[Debug]", "[Internal]", "Coach note:",
+                    "Wait for", "Before giving specific"
+                ]
+                
+                for pattern in debug_patterns:
+                    content_text = content_text.replace(pattern, "").strip()
+                
+                # Only include if there's meaningful content left
+                if len(content_text.strip()) > 10:
+                    cleaned_chunks.append(content_text)
 
-```
-    # Add previous session context
-    history_text = ""
-    if coaching_history and len(coaching_history) > 0:
-        last_session = coaching_history[0]
-        if last_session.get('technical_focus'):
-            history_text += f"\nPrevious session focus: {last_session['technical_focus']}"
-    
-    # Add current conversation context
-    if conversation_history and len(conversation_history) > 1:
-        history_text += "\nCurrent session conversation:\n"
-        for msg in conversation_history[-10:]:  # Last 10 exchanges to maintain context
-            role = "Player" if msg['role'] == 'user' else "Coach Taai"
-            history_text += f"{role}: {msg['content']}\n"
-    
-    # Clean context chunks of debug text
-    cleaned_chunks = []
-    for chunk in context_chunks:
-        if chunk.get('text'):
-            content_text = chunk.get('text', '')
-            
-            # Remove debug patterns
-            debug_patterns = [
-                "Wait for player response before giving specific drill instruction",
-                "PATTERN 1", "PATTERN 2", "PATTERN 3",
-                "Internal note:", "Coach instruction:",
-                "DEBUG:", "Note to coach:", "Meta-commentary:",
-                "[Debug]", "[Internal]", "Coach note:",
-                "Wait for", "Before giving specific"
-            ]
-            
-            for pattern in debug_patterns:
-                content_text = content_text.replace(pattern, "").strip()
-            
-            # Only include if there's meaningful content left
-            if len(content_text.strip()) > 10:
-                cleaned_chunks.append(content_text)
-
-    context_text = "\n\n".join(cleaned_chunks)
-    
-    return f"""{coaching_prompt}
-```
-
+        context_text = "\n\n".join(cleaned_chunks)
+        
+        return f"""{coaching_prompt}
 {history_text}
 
 Tennis Knowledge: {context_text}
