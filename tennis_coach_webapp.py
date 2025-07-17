@@ -266,7 +266,10 @@ def detect_session_end(message_content: str, conversation_history: list = None) 
     # LIKELY ending phrases (need confirmation)
     likely_endings = [
         "thanks coach", "thank you coach", "great session", "good session",
-        "that's helpful", "i'll practice that", "got it, thanks", "perfect, thanks"
+        "that's helpful", "i'll practice that", "got it, thanks", "perfect, thanks",
+        "see you soon coach", "see you next time coach", "talk soon coach",
+        "catch you later coach", "appreciate it coach", "thanks coach, see you",
+        "thank you coach, see you", "see you soon", "see you next time", "talk soon"
     ]
     
     # AMBIGUOUS words (only if conversation is winding down)
