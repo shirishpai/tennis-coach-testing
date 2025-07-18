@@ -250,6 +250,72 @@ def create_new_player(email: str, name: str = "", tennis_level: str = ""):
     except Exception as e:
         return None
 
+def classify_ending_intent(message_content: str) -> str:
+    """
+    Use AI to classify if a message indicates session ending intent
+    Returns: 'DEFINITIVE', 'LIKELY', 'AMBIGUOUS', or 'NOT_ENDING'
+    """
+    try:
+        # Quick obvious check first (for speed)
+        obvious_definitive = ["end session", "stop session", "goodbye", "farewell"]
+        if any(phrase in message_content.lower() for phrase in obvious_definitive):
+            return "DEFINITIVE"
+        
+        # Use Claude for nuanced detection
+        classification_prompt = f"""
+Classify this message from a tennis coaching session. The player might be trying to end the session.
+
+Player message: "{message_content}"
+
+Classify as exactly one of these:
+
+DEFINITIVE - Clear, unambiguous ending (like "goodbye coach", "end session", "bye coach")
+
+LIKELY - Polite endings with gratitude or departure signals (like "thanks coach", "okay bye thank you", "see you soon coach", "got it, thanks coach")
+
+AMBIGUOUS - Single words or unclear intent (like just "thanks", "bye", "okay", "done" by themselves)
+
+NOT_ENDING - Clearly continuing conversation (questions, requests for help, tennis discussion)
+
+Respond with only one word: DEFINITIVE, LIKELY, AMBIGUOUS, or NOT_ENDING"""
+
+        # Get Claude's classification
+        _, claude_client = setup_connections()
+        if claude_client:
+            response = claude_client.messages.create(
+                model="claude-3-5-sonnet-20241022",
+                max_tokens=10,
+                messages=[{"role": "user", "content": classification_prompt}]
+            )
+            
+            classification = response.content[0].text.strip().upper()
+            
+            # Validate response
+            valid_responses = ["DEFINITIVE", "LIKELY", "AMBIGUOUS", "NOT_ENDING"]
+            if classification in valid_responses:
+                return classification
+        
+        # Fallback classification if Claude fails
+        return fallback_classification(message_content)
+        
+    except Exception as e:
+        # Use fallback if anything goes wrong
+        return fallback_classification(message_content)
+
+def fallback_classification(message_content: str) -> str:
+    """Simple fallback classification if AI fails"""
+    message_lower = message_content.lower().strip()
+    
+    # Simple keyword-based fallback
+    if any(word in message_lower for word in ["goodbye", "farewell", "end session"]):
+        return "DEFINITIVE"
+    elif any(word in message_lower for word in ["thanks coach", "bye coach", "see you"]):
+        return "LIKELY" 
+    elif any(word in message_lower for word in ["thanks", "bye", "okay", "done"]):
+        return "AMBIGUOUS"
+    else:
+        return "NOT_ENDING"
+
 def detect_session_end(message_content: str, conversation_history: list = None) -> dict:
     """
     Intelligent session end detection with context awareness
@@ -257,38 +323,17 @@ def detect_session_end(message_content: str, conversation_history: list = None) 
     """
     message_lower = message_content.lower().strip()
     
-    # DEFINITIVE ending phrases (high confidence)
-    definitive_endings = [
-        "end session", "stop session", "finish session", "done for today",
-        "that's all for today", "see you next time", "until next time",
-        "goodbye coach", "bye coach", "thanks coach, bye", "session over"
-    ]
+    # Use AI to classify the message intent
+    ending_classification = classify_ending_intent(message_content)
     
-    # LIKELY ending phrases (need confirmation)
-    likely_endings = [
-        "thanks coach", "thank you coach", "great session", "good session",
-        "that's helpful", "i'll practice that", "got it, thanks", "perfect, thanks",
-        "see you soon coach", "see you next time coach", "talk soon coach",
-        "catch you later coach", "appreciate it coach", "thanks coach, see you",
-        "thank you coach, see you", "see you soon", "see you next time", "talk soon"
-    ]
+    if ending_classification == "DEFINITIVE":
+        return {'should_end': True, 'confidence': 'high', 'needs_confirmation': False}
     
-    # AMBIGUOUS words (only if conversation is winding down)
-    ambiguous_endings = ["thanks", "thank you", "bye", "done", "great", "perfect"]
+    elif ending_classification == "LIKELY":
+        return {'should_end': True, 'confidence': 'medium', 'needs_confirmation': True}
     
-    # Check definitive endings
-    for phrase in definitive_endings:
-        if phrase in message_lower:
-            return {'should_end': True, 'confidence': 'high', 'needs_confirmation': False}
-    
-    # Check likely endings (coaching-specific)
-    for phrase in likely_endings:
-        if phrase in message_lower:
-            return {'should_end': True, 'confidence': 'medium', 'needs_confirmation': True}
-    
-    # Check ambiguous endings with context
-    if any(word in message_lower for word in ambiguous_endings):
-        # Only trigger if message is short AND seems conclusive
+    elif ending_classification == "AMBIGUOUS":
+        # Use existing context logic for ambiguous cases
         word_count = len(message_lower.split())
         if word_count <= 3:
             # Check conversation context for winding down signals
