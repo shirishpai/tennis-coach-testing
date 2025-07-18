@@ -120,7 +120,7 @@ Content: {chunk['text']}
     history_text = ""
     if conversation_history:
         history_text = "\nPrevious conversation:\n"
-        for msg in conversation_history[-6:]:
+        for msg in conversation_history[20:]:
             role = "Player" if msg['role'] == 'user' else "Coach"
             history_text += f"{role}: {msg['content']}\n"
     return f"""You are a professional tennis coach providing REMOTE coaching advice through chat. The player is not physically with you, so focus on guidance they can apply on their own.
@@ -1323,7 +1323,7 @@ Keep responses SHORT (1-2 sentences max). Be enthusiastic but concise."""
         history_text = ""
         if conversation_history:
             history_text = "\nCurrent conversation:\n"
-            for msg in conversation_history[-6:]:  # Last 6 exchanges
+            for msg in conversation_history[-20:]:  # Last 20 exchanges
                 role = "Player" if msg['role'] == 'user' else "Coach Taai"
                 history_text += f"{role}: {msg['content']}\n"
         
@@ -1407,7 +1407,7 @@ Just give direct coaching advice."""
         # Add current conversation context
         if conversation_history and len(conversation_history) > 1:
             history_text += "\nCurrent session conversation:\n"
-            for msg in conversation_history[-10:]:  # Last 10 exchanges to maintain context
+            for msg in conversation_history[-20:]:  # Last 20 exchanges to maintain context
                 role = "Player" if msg['role'] == 'user' else "Coach Taai"
                 history_text += f"{role}: {msg['content']}\n"
         
@@ -1465,7 +1465,7 @@ def get_smart_coaching_response(prompt, index, claude_client, coaching_mode, top
         recent_conversation = ""
         if len(st.session_state.messages) > 1:
             recent_conversation = "\nCURRENT SESSION CONVERSATION:\n"
-            for msg in st.session_state.messages[-10:]:
+            for msg in st.session_state.messages[20:]:
                 role = "Player" if msg['role'] == 'user' else "Coach Taai"
                 recent_conversation += f"{role}: {msg['content']}\n"
         
@@ -1529,7 +1529,7 @@ Provide direct coaching advice:"""
                 recent_conversation = ""
                 if len(st.session_state.messages) > 1:
                     recent_conversation = "\nCURRENT SESSION CONVERSATION:\n"
-                    for msg in st.session_state.messages[-10:]:
+                    for msg in st.session_state.messages[-20:]:
                         role = "Player" if msg['role'] == 'user' else "Coach Taai"
                         recent_conversation += f"{role}: {msg['content']}\n"
                 
