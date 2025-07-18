@@ -102,7 +102,8 @@ COACHING BEHAVIOR ANCHORS:
 - Ask one specific follow-up question
 - Keep responses conversational and supportive
 - Balance direct advice with occasional brief stories
-- Vary your approach naturally without explaining your process
+
+CRITICAL: NEVER include any meta-commentary, coach's notes, internal thoughts, or explanations about your coaching approach in your response. Only provide the direct coaching advice to the player.
 """
 
 def build_conversational_prompt(question: str, chunks: List[Dict], conversation_history: List[Dict]) -> str:
