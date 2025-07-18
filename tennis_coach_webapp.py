@@ -120,7 +120,7 @@ Content: {chunk['text']}
     history_text = ""
     if conversation_history:
         history_text = "\nPrevious conversation:\n"
-        for msg in conversation_history[20:]:
+        for msg in conversation_history[12:]:
             role = "Player" if msg['role'] == 'user' else "Coach"
             history_text += f"{role}: {msg['content']}\n"
     return f"""You are a professional tennis coach providing REMOTE coaching advice through chat. The player is not physically with you, so focus on guidance they can apply on their own.
@@ -1955,7 +1955,7 @@ def setup_player_session_with_continuity(player_email: str):
         
         # Load coaching history
         with st.spinner("Loading your coaching history..."):
-            recent_summaries = get_player_recent_summaries(existing_player['id'], 2)
+            recent_summaries = get_player_recent_summaries(existing_player['id'], 3)
             st.session_state.coaching_history = recent_summaries
         
         # Generate two-part welcome message
